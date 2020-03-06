@@ -9,6 +9,7 @@ import Test.QuickCheck.Checkers
 
 import Prelude hiding (either)
 import CatUtils
+import Algebras
 
 
 instance Arbitrary a => Arbitrary (Id a) where
@@ -52,7 +53,17 @@ instance (Arbitrary a, Arbitrary b) => Arbitrary (ListPair a b) where
 
 instance (Eq a, Eq b) => EqProp (ListPair a b) where
   a =-= b = eq a b
-  
+
+instance (Arbitrary a) => Arbitrary (ExprF a) where
+  arbitrary = oneof [ (PlusF <$> arbitrary <*> arbitrary)
+                    , (ConstF <$> arbitrary)
+                    , (TimesF <$> arbitrary <*> arbitrary)
+                    , (VarF <$> arbitrary)
+                    ]
+
+instance (Eq a) => EqProp (ExprF a) where
+  a =-= b = eq a b
+
 -- Product Type Specializations
 t :: (Int -> Int, Int -> Int) -> (Int -> (Int, Int))
 t = tuple
@@ -105,3 +116,6 @@ spec = do
     describe "universal constructions for sums" $ do
       it "either and uneither are inverses if either is uncurried" $
         property $ inverse (uncurry eit) unEit
+    describe "expression algebra tests" $ do
+      it "ExprF has a valid functor instance" $ do
+        verboseBatch (functor (undefined :: ExprF (Int, Int, Int)))

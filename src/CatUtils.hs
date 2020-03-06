@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 module CatUtils where
 
-import Prelude
+import Prelude hiding (either)
 
 -- A category theory toolbox
 --import ConCat.Pair
@@ -208,3 +208,70 @@ distLR ((Left a), c) = Left (a, c)
 distLR ((Right b), c) = Right (b, c)
 
 {-$ EXPONENTIALS AND CURRYING $-}
+
+-- Functions are supposed to be morphisms in some category.
+-- We need an object in our category that represents function types.
+-- This is not a problem in Set, as functions between two sets form a set, the homset, which is an object of Set.
+-- In an arbitrary category, the Homset is not an object of said category.
+-- We need a way of describing a set of functions between two sets without referring to its elements as functions,
+-- then generalize this characterization to arbitrary categories.
+
+-- A Universal property of the function set can be expressed this way.
+-- For any element f : b -> c of the function set, there is a function that maps the pair (f, b) to c. This is evaluation.
+-- Whatever object we select to represent morphisms from b to c, there must be an evaluation morphism from the product of
+-- it with b that goes to c. That is all we can say about this function object in terms of morphisms.
+-- We just have to make sure that this is the best such object.
+
+-- We have to ensure that any other object a that pretends to be a function object by proviging a morphism f : (a, b) -> c
+-- is inferior to the evaluator, by requiring that there be a unique morphism from a to the actual function object,
+-- which we can call the exponential c^b, that factors the through the actual evaluator, which we'll call eta.
+
+-- Cartesian Closed Category:
+-- A Category with a terminal object and both a product and an exponential defined for every pair of objects.
+
+-- The expnential object c^b represents the set of morphisms b -> c.
+-- Consider that the set of morphisms ((), b) -> c is isomorphic to the set of morphisms b -> c
+-- because () is the unit of product.
+-- Universality tells us that these morphisms are in turn in one to one correspondence with the set of morphisms h: () -> c^b,
+-- which are the global elements of the exponential object, by virtue of applying h to the () of each product and id to the b,
+-- to get (c^b, b) which can then get to c via the evaluator.
+
+-- Currying In Haskell
+-- There is a bijection between morphisms that take a product as an argument and morphisms that product a function object.
+-- The exponential object is defined by its mapping in property, and its universal construction can be used to produce a
+-- mapping out of a product.
+-- f :: (a, b) -> c can get to h : a -> c^b
+
+-- given a function from a pair, we can create a function that returns a function of two arguments
+curry' :: ((a, b) -> c) -> (a -> (b -> c))
+curry' f = \a -> (\b -> f (a, b))
+
+-- Conversely, given a function of two arguments, we can create a function that takes a pair
+uncurry' :: (a -> b -> c) -> ((a, b) -> c)
+uncurry' f = \(a, b) -> f a b
+
+-- the evaluator can be defined as
+epsilon :: (b -> c, b) -> c
+epsilon (g, b) = g b
+
+-- $ Functoriality of the Exponential
+
+rmap :: (c -> c') -> (a -> c) -> a -> c'
+rmap g = curry (g . epsilon)
+
+lmap :: (b' -> b) -> (b -> c) -> b' -> c
+lmap g = curry (epsilon . bimap id g)
+
+dimap' :: (a' -> a) -> (b -> b') -> ((a -> b) -> (a' -> b'))
+dimap' g' g = \h -> g . h . g'
+
+class Profunctor p where
+  dimap :: (a' -> a) -> (b -> b') -> (p a b -> p a' b')
+
+instance Profunctor (->) where
+  dimap g' g h = g . h . g'
+
+
+-- Distributivity Revisited - this only works in a cartesian closed category with currying.
+distRL' :: (Either a b, c) -> Either (a, c) (b, c)
+distRL' = uncurry (either (curry Left) (curry Right))
