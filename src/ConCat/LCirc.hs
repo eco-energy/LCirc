@@ -16,8 +16,6 @@ import ConCat.Pair
 import ConCat.Rep
 import GHC.Generics (Generic)
 import Data.Bifunctor
-import qualified Data.Set as Set
-import qualified Algebra.Graph.Labelled as G
 import qualified ConCat.Additive as A
 
 
