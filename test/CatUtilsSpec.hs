@@ -119,3 +119,5 @@ spec = do
     describe "expression algebra tests" $ do
       it "ExprF has a valid functor instance" $ do
         verboseBatch (functor (undefined :: ExprF (Int, Int, Int)))
+      it "recursive eval for Expr gives the right answer" $ do
+        (reval expr) `shouldBe` (Just $ 18)
