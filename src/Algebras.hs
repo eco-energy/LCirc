@@ -26,6 +26,15 @@ expr = Plus (Times (Const 2)
                    (Times (Var "x") (Var "x")))
             (Plus (Times (Const 3) (Var "x"))
                   (Const 4))
+-- reval
+-- A recursive evaluation function for Expr
+reval :: Expr -> Maybe Double
+reval (Const a) = Just $ a
+reval (Var "x") = Just $ 2
+reval (Var _) = Nothing
+reval (Plus x y) = (+) <$> (reval x) <*> (reval y)
+reval (Times x y) = (*) <$> (reval x) <*> (reval y)
+
 
 -- recursive process of constructing expressions can be decomposed into non-recursive steps.
 -- Non-recursive type constructor with a placeholder for recursive bits
@@ -35,9 +44,9 @@ data ExprF a = PlusF  a a
              | ConstF a
              | VarF   String
              deriving (Eq, Show)
-
-type Leaf = ExprF Void
 {--
+type Leaf = ExprF Void
+
 -- TODO: To Doc Tests
 
 -- Leaves can clearly only be constants or variables
@@ -91,7 +100,6 @@ showEx (PlusF x y) = Text.intercalate " + " [tshow x, tshow y]
 showEx (TimesF x y) = Text.intercalate " * " [tshow x, tshow y]
 
 -- How we combine partial evaluators into one recursive algorithm that would evaluate any recursive expression tree.
-
 
 {--$ The Algebra $--}
 
