@@ -28,6 +28,7 @@ dependencies:
 - hspec
 - checkers
 - text
+- finite-typelits
 library:
   source-dirs: src
 
