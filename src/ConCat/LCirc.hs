@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 module ConCat.LCirc where
 
 import Prelude hiding (id, (.), uncurry, curry)
@@ -17,8 +19,7 @@ import ConCat.Rep
 import GHC.Generics (Generic)
 import Data.Bifunctor
 import qualified ConCat.Additive as A
-
-
+import Data.Finite
 -- A category where the morphisms are circuits made of wires with circuit elemtns on them
 
 
@@ -31,39 +32,29 @@ import qualified ConCat.Additive as A
 -- A network, such as an electrical circuit, with m inputs and n outputs is a morphism from m to n,
 -- while putting networks together in series is composition, and setting them side by side is tensoring.
 
--- Each kind of network corresponds to matematically natrual prop.
+-- Each kind of network corresponds to a mathematically natural prop.
 
 
 {----------------------------------------------------------------------------------------
-         Labelled Graphs, Cospans and LCirc
+         Labelled Graphs where vertices are finite sets and edges have a label
 ----------------------------------------------------------------------------------------}
 type R = Double
 
-newtype Edge l v = Edge (Pair v, l) deriving (Generic)
+newtype Edge l v = Edge (Pair v, l) deriving (Show, Generic)
 mkEdge :: v -> v -> l -> Edge l v
 mkEdge s t l = Edge (s :# t, l)
 
+instance (Eq l, Eq v) => Eq (Edge l v) where
+  (Edge (a :# b, l)) == (Edge (a' :# b', l')) = a == a' && b == b' && l == l'
+
 type Edges l v = [Edge l v]
 
-type Nodes v = [v] 
+type Nodes v = [v]
 
-newtype LG l v = LG { runLG :: (Nodes v, Edges l v) } deriving (Generic)
+newtype LG l v = LG { runLG :: (Nodes v, Edges l v) } deriving (Eq, Show, Generic)
 
 mkLG :: Nodes v -> Edges l v -> LG l v
 mkLG = curry LG
-
-newtype Cospan k v i o = Cospan { runCospan :: (i `k` v, o `k` v) } deriving (Generic)
-mkCospan :: i `k` v -> o `k` v -> Cospan k v i o
-mkCospan = curry Cospan
-
-type Inputs = [Pin]
-type Outputs = [Pin]
-
-type CospanC = Cospan (->) (Nodes Int) Inputs Outputs
-
-
-newtype LCirc l v = LCirc (LG l v, CospanC) deriving (Generic)
-mkLC = curry LCirc
 
 src :: Edge l v -> v
 src (Edge (s :# _, _)) = s
@@ -74,16 +65,75 @@ tgt (Edge (_ :# t, _)) = t
 label :: Edge l v -> l
 label (Edge (_, l)) = l
 
+
+{---------------------------------------------------------------------------------
+    Cospans in a Category
+---------------------------------------------------------------------------------}
+
+newtype Cospan k v i o = Cospan { runCospan :: (i `k` v, o `k` v) } deriving (Generic, Show)
+
+mkCospan :: i `k` v -> o `k` v -> Cospan k v i o
+mkCospan = curry Cospan
+
+instance (Category k, Ok k v) => Category (Cospan k v)
+
+
+data Port a = Input (Int, Int) | Output (Int, Int) deriving (Show)
+
+type Inputs a = [Port (CIdx a)]
+type Outputs a = [Port (CIdx a)]
+
+
+--cmpC :: Cospan k v i o -> Cospan k v o o' -> Cospan k v i o'
+--cmpC (Cospan (i, o)) (Cospan (i', o')) = 
+
+type CospanC i o = Cospan (->) (Nodes Int) (Inputs i) (Outputs o)
+
+
+
+{---------------------------------------------------------------------------------
+    An LCirc is a Pair of an LGraph over a label-set of Circuit Elements
+    and a Cospan over the category of Finite Sets.
+---------------------------------------------------------------------------------}
+
+newtype LCirc l v i o = LCirc (LG l v, CospanC i o) deriving (Generic)
+
+instance (Show l, Show v) => Show (LCirc l v i o) where
+  show (LCirc (lg, Cospan (i, o))) = "LCirc: " <> (show lg)
+
+instance (Eq l, Eq v) => Eq (LCirc l v i o) where
+  (LCirc (lg, Cospan (i, o))) == (LCirc (lg', Cospan (i', o'))) = lg == lg'
+
+mkLC = curry LCirc
+
+
 input :: Cospan k v i o -> i `k` v
 input (Cospan (i, _)) = i
 
 output :: Cospan k v i o -> o `k` v
 output (Cospan (_, o)) = o
 
-unitR :: LG R Int
-unitR = mkLG [1, 2] [Edge (1 :# 2, 0)]
+unitR :: LG CircEl Int
+unitR = mkLG [1, 2] [mkEdge 1 2 $ Res 0]
 
 data CircEl = Res R | Cap R | Ind R deriving (Eq, Ord, Show, Generic)
+
+
+
+{-------------------------
+     Operadic Machinery
+--------------------------}
+
+data Nat = Z | S Nat deriving (Show)
+
+type One = S Z
+type Two = S (S Z)
+type Three = S (S (S Z))
+
+data CIdx n where
+  CS0 :: CIdx Z
+  CSCons :: CIdx n -> CIdx (S n)
+
 
 r3 :: LG CircEl Int
 r3 = mkLG [1, 2] [mkEdge 1 2 $ Res 3] 
@@ -101,29 +151,52 @@ circuitEx' = mkLG [5, 6, 7] [ mkEdge 5 6 $ Res 5
                             , mkEdge 6 7 $ Res 8
                             ]
 
-intCospan :: [Pin] -> [Pin] -> CospanC
-intCospan is os = mkCospan (\_ -> map getI is) (\_ -> map getO os)
+
+
+{-------------------------
+ Operadic Circuit Cospans
+--------------------------}
+
+
+intCospan :: [Port (CIdx i)] -> [Port (CIdx o)] -> CospanC i o
+intCospan is os = (mkCospan (\_ -> map getI is) (\_ -> map getO os))
   where
-    getI (Input _ n) = n
-    getO (Output _ n) = n
+    getI (Input (_, n)) = n
+    getO (Output (_, n)) = n
 
-data Pin = Input Int Int | Output Int Int
+mkInput = curry Input
+mkOutput = curry Output
 
-exCospan :: CospanC 
+exCospan :: CospanC One Two
 exCospan = intCospan
-  [(Input 1 1)]
-  [ (Output 1 2)
-  , (Output 2 2)] 
+  [(mkInput 1 1)]
+  [ (mkOutput 1 2)
+  , (mkOutput 2 2)] 
 
+exCospan' :: CospanC Two Three 
 exCospan' = intCospan
-  [(Input 1 5), (Input 2 7)]
-  [(Output 1 5), (Input 2 7)]
+  [(mkInput 1 5), (mkInput 2 7)]
+  [(mkOutput 1 5), (mkOutput 2 7)]
 
+exLC :: LCirc CircEl Int One Two
 exLC = mkLC circuitEx exCospan
 
+exLC' :: LCirc CircEl Int Two Three
 exLC' = mkLC circuitEx' exCospan'
 
+composeLC :: LCirc l v i o -> LCirc l v o o' -> LCirc l v i o'
+composeLC (LCirc (lg, Cospan (i, o))) (LCirc (lg', Cospan (i', o'))) = mkLC lg'' cspan''
+  where
+    -- For a list of nodes, get all the edges
+    lg'' = compLG o i' lg lg'
+    cspan'' = undefined --compCS cspan cspan'
 
+compLG :: (Outputs i -> Nodes Int) -> (Inputs i -> Nodes Int) -> LG l v -> LG l v -> LG l v
+compLG o i' lg lg' = undefined
+
+
+compCS :: Cospan k v i o -> Cospan k v o o' -> Cospan k v i o'
+compCS (Cospan (i, o)) (Cospan (i', o')) = mkCospan i o'
 
 {----------------------------------------------------------------------------------------
          Category Instances
@@ -152,13 +225,9 @@ exLC' = mkLC circuitEx' exCospan'
 -- Symmetric if B_yx . B_xy = id(x<>y)
 
 
-
-composeCospan :: Cospan k v i o -> Cospan k v o o'  -> Maybe (Cospan k v i o')
-composeCospan = undefined
-
-
-instance HasRep (LCirc l v) where
-  type Rep (LCirc l v) = (l, v)
+{--
+instance HasRep (LCirc l v i o) where
+  type Rep (LCirc l v i o) = (l, v)
   abst = undefined
   repr = undefined
 
@@ -203,12 +272,6 @@ instance CoproductCat LCirc where
   inr = undefined
   jam = undefined
 
-
-{--
-instance LGraph LG where
-  src = undefined
-  tgt = undefined
-  label = edgeLabel
 --}
 
 {----------------------------------------------------------------------------------------
