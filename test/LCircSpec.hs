@@ -21,6 +21,44 @@ instance (Arbitrary l, Arbitrary v) => Arbitrary (Edge l v) where
 spec = do
   describe "Testing whether an example of an LCirc has coherent semantics" $ do
     let
+      unitR :: LG CircEl NodeId
+      unitR = mkLG' [1, 2] [mkEdge 1 2 $ Res 0]
+
+
+      r3 :: LG CircEl NodeId
+      r3 = mkLG' [1, 2] [mkEdge 1 2 $ Res 3] 
+
+      circuitEx :: LG CircEl NodeId
+      circuitEx = mkLG' [1, 2, 3, 4] [ mkEdge 1 4 $ Res 2
+                               , mkEdge 1 4 $ Cap 3
+                               , mkEdge 1 2 $ Res 1
+                               , mkEdge 2 3 $ Ind 1
+                               , mkEdge 3 4 $ Res 1
+                               ] 
+
+      circuitEx' :: LG CircEl NodeId
+      circuitEx' = mkLG' [5, 6, 7] [ mkEdge 5 6 $ Res 5
+                             , mkEdge 6 7 $ Res 8
+                             ]
+
+
+      exCospan :: CospanC NodeId One Two
+      exCospan = mkCospanC
+        [(mkInput 1 1)]
+        [ (mkOutput 1 4)
+        , (mkOutput 2 4)] 
+
+      exCospan' :: CospanC NodeId Two Three 
+      exCospan' = mkCospanC
+        [(mkInput 1 5), (mkInput 2 7)]
+        [(mkOutput 1 5), (mkOutput 2 7)]
+
+      exLC :: LCirc CircEl NodeId One Two
+      exLC = mkLC circuitEx exCospan
+
+      exLC' :: LCirc CircEl NodeId Two Three
+      exLC' = mkLC circuitEx' exCospan'
+
       compdCirc :: LG CircEl NodeId
       compdCirc = mkLG' [1, 2, 3, 4, 6] [ mkEdge 1 4 $ Res 2
                                         , mkEdge 1 4 $ Cap 3
@@ -30,6 +68,7 @@ spec = do
                                         , mkEdge 4 6 $ Res 5
                                         , mkEdge 4 6 $ Res 8
                                         ]
+      
     it "compatible lgraph node composition" $ do
       let n1 = Set.fromList [1, 2, 3 :: NodeId]
           n2 = Set.fromList [4, 5, 6 :: NodeId]

@@ -210,46 +210,9 @@ composeLC (LCirc ((LG (n, e)), CospanC (i, o))) (LCirc ((LG (n', e')), CospanC (
 
 mkLG' ns es = mkLG (mkNodes ns) $ mkEdges es 
 
-unitR :: LG CircEl NodeId
-unitR = mkLG' [1, 2] [mkEdge 1 2 $ Res 0]
-
-
-r3 :: LG CircEl NodeId
-r3 = mkLG' [1, 2] [mkEdge 1 2 $ Res 3] 
-
-circuitEx :: LG CircEl NodeId
-circuitEx = mkLG' [1, 2, 3, 4] [ mkEdge 1 4 $ Res 2
-                               , mkEdge 1 4 $ Cap 3
-                               , mkEdge 1 2 $ Res 1
-                               , mkEdge 2 3 $ Ind 1
-                               , mkEdge 3 4 $ Res 1
-                               ] 
-
-circuitEx' :: LG CircEl NodeId
-circuitEx' = mkLG' [5, 6, 7] [ mkEdge 5 6 $ Res 5
-                             , mkEdge 6 7 $ Res 8
-                             ]
 mkPort = curry Port
 mkInput = mkPort
 mkOutput = mkPort
-
-exCospan :: CospanC NodeId One Two
-exCospan = mkCospanC
-  [(mkInput 1 1)]
-  [ (mkOutput 1 4)
-  , (mkOutput 2 4)] 
-
-exCospan' :: CospanC NodeId Two Three 
-exCospan' = mkCospanC
-  [(mkInput 1 5), (mkInput 2 7)]
-  [(mkOutput 1 5), (mkOutput 2 7)]
-
-exLC :: LCirc CircEl NodeId One Two
-exLC = mkLC circuitEx exCospan
-
-exLC' :: LCirc CircEl NodeId Two Three
-exLC' = mkLC circuitEx' exCospan'
-
 
 
 
