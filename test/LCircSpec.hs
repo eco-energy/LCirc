@@ -3,28 +3,48 @@
 module LCircSpec where
 
 import Test.QuickCheck.Classes
-import Test.QuickCheck
+import Test.QuickCheck hiding (output)
 import Test.Hspec
 import Test.QuickCheck.Checkers
 
 import ConCat.LCirc
+import qualified Data.Set as Set
+import qualified Data.Map as Map
+import ConCat.Pair
+
+instance (Arbitrary v) => Arbitrary (Pair v) where
+  arbitrary = (:#) <$> arbitrary <*> arbitrary
+
+instance (Arbitrary l, Arbitrary v) => Arbitrary (Edge l v) where
+  arbitrary = mkEdge <$> arbitrary <*> arbitrary <*> arbitrary
 
 spec = do
   describe "Testing whether an example of an LCirc has coherent semantics" $ do
-    it "Cospan Composition" $ do
+    let
+      compdCirc :: LG CircEl NodeId
+      compdCirc = mkLG' [1, 2, 3, 4, 6] [ mkEdge 1 4 $ Res 2
+                                        , mkEdge 1 4 $ Cap 3
+                                        , mkEdge 1 2 $ Res 1
+                                        , mkEdge 2 3 $ Ind 1
+                                        , mkEdge 3 4 $ Res 1
+                                        , mkEdge 4 6 $ Res 5
+                                        , mkEdge 4 6 $ Res 8
+                                        ]
+    it "compatible lgraph node composition" $ do
+      let n1 = Set.fromList [1, 2, 3 :: NodeId]
+          n2 = Set.fromList [4, 5, 6 :: NodeId]
+          m12 = Map.fromList $ [(5, \c-> if (c == 5) then 1 else c), (4, \c-> if c == 4 then 2 else c)]
+      mergeNodes n1 n2 m12 `shouldBe` (Set.fromList [1, 2, 3, 6])
+    it "compatible lgraph edge composition" $ do
+      let e1 = edges circuitEx
+          e2 = edges circuitEx'
+          e12 = unifyComposablePortSets (input exCospan') (output exCospan)
+          
+      (Set.toAscList $ replaceEdges e1 e2 e12) `shouldBe` (Set.toAscList $ edges compdCirc)
+    it "compatible lCirc composition" $ do
       let
-        compdCirc :: LG CircEl Int
-        compdCirc = mkLG [1, 2, 3, 4, 6] [ mkEdge 1 2 $ Res 2
-                                         , mkEdge 1 2 $ Cap 3
-                                         , mkEdge 1 3 $ Res 1
-                                         , mkEdge 3 4 $ Ind 1
-                                         , mkEdge 4 2 $ Res 1
-                                         , mkEdge 4 6 $ Res 5
-                                         , mkEdge 4 6 $ Res 8
-                                         ]
-        compdCospan :: CospanC One Three
-        compdCospan = intCospan [mkInput 1 1] [mkOutput 1 4, mkOutput 2 6]
-        compdEx :: LCirc CircEl Int One Three
+        compdCospan :: CospanC NodeId One Three
+        compdCospan = mkCospanC [mkInput 1 1] [mkOutput 1 4, mkOutput 2 6]
+        compdEx :: LCirc CircEl NodeId One Three
         compdEx = mkLC compdCirc compdCospan
-
       (composeLC exLC exLC') `shouldBe` compdEx
