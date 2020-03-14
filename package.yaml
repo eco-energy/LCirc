@@ -29,6 +29,7 @@ dependencies:
 - checkers
 - text
 - finite-typelits
+- containers
 library:
   source-dirs: src
 
