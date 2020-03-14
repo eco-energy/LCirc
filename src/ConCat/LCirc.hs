@@ -51,21 +51,6 @@ newtype Edge l v = Edge (Pair v, l) deriving (Show, Generic)
 mkEdge :: v -> v -> l -> Edge l v
 mkEdge s t l = Edge (s :# t, l)
 
-replaceMatching :: (Eq v) => Maybe (v -> v) -> Maybe (v -> v) -> Edge l v ->  Edge l v
-replaceMatching (Just f) (Just g) e@(Edge (s :# t, l)) = (Edge (f s :# g t, l))
-replaceMatching (Just f) Nothing e@(Edge (s :# t, l)) = (Edge (f s :# t, l))
-replaceMatching Nothing (Just g) e@(Edge (s :# t, l)) = (Edge (s :# g t, l))
-replaceMatching Nothing Nothing e@(Edge (s :# t, l)) = e
-
-
-replaceEdges :: (Ord v, Ord l) => Edges l v -> Edges l v -> Map v (v -> v) -> Edges l v
-replaceEdges e1 e2 e12 = Set.union e1 e2'
-  where
-    e2' = Set.map re e2
-    re e = replaceMatching (Map.lookup (src e) e12) (Map.lookup (tgt e) e12) e
-
-getFn :: (Ord v) => Map v (v -> v) -> v -> Maybe (v -> v)
-getFn fnMap n = Map.lookup n fnMap
 
 instance (Eq l, Eq v) => Eq (Edge l v) where
   (Edge (a :# b, l)) == (Edge (a' :# b', l')) = (a == a' && b == b' || a == b' && b == a') && l == l'
@@ -88,13 +73,10 @@ edges = snd . runLG
 mkLG :: Nodes v -> Edges l v -> LG l v
 mkLG = curry LG
 
+mkLG' ns es = mkLG (mkNodes ns) $ mkEdges es 
+
 mkNodes :: (Ord v) => [v] -> Nodes v
 mkNodes = Set.fromList
-
-mergeNodes :: (Ord v) => Nodes v -> Nodes v -> Map v (v -> v) -> Nodes v
-mergeNodes n n' chngs = Set.union n n'_
-  where
-    n'_ = foldl (\k nn-> Set.delete nn k) n' (Map.keys chngs)
 
 mkEdges :: (Ord v, Ord l) => [Edge l v] -> Edges l v
 mkEdges = Set.fromList
@@ -110,26 +92,8 @@ label :: Edge l v -> l
 label (Edge (_, l)) = l
 
 
-{---------------------------------------------------------------------------------
-    Cospans in a Category
----------------------------------------------------------------------------------}
-{--
-newtype Cospan v i o = Cospan
-  { runCospan :: (i -> v, o -> v, [v]) } deriving (Generic)
-
-mkCospan :: (i -> v) -> (o -> v) -> [v] -> Cospan v i o
-mkCospan i o vs = Cospan (i, o, vs)
-
-compCospan :: (Eq v) => Cospan v i o -> Cospan v o o' -> Cospan v i o
-compCospan (Cospan (f, g, vs)) (Cospan (h, k, vs')) = mkCospan (iN . f) (iP . g) vs''
-  where
-    iP = undefined
-    iN = undefined
-    vs'' = identify vs vs'
---}
-
 {-------------------------
-     Operadic Machinery
+     Operadic Machinery for Cospans with Nat-Indexed Ports
 --------------------------}
 
 data Nat = Z | S Nat deriving (Show)
@@ -148,26 +112,24 @@ type NodeId = Int
 
 data Port v a = Port (PortId, v) deriving (Eq, Ord, Show)
 
-unifyPorts :: (Eq v) => Port v a -> Port v a -> (v, (v -> v))
-unifyPorts (Port (p, n)) (Port (p', n')) = (n', (\c -> if c == n' then n else c)) 
-
-unifyComposablePortSets ::  (Ord v) => Inputs v i -> Outputs v i -> Map v (v -> v)
-unifyComposablePortSets is os = Map.fromList $ map (uncurry unifyPorts) $ zip os is 
+mkPort = curry Port
+mkInput = mkPort
+mkOutput = mkPort
 
 type Inputs v a = [Port v (CIdx a)]
 type Outputs v a = [Port v (CIdx a)]
-
-
---cmpC :: Cospan k v i o -> Cospan k v o o' -> Cospan k v i o'
---cmpC (Cospan (i, o)) (Cospan (i', o')) = 
 
 newtype CospanC v i o = CospanC (Inputs v i, Outputs v o)
 
 mkCospanC :: Inputs v i -> Outputs v o -> CospanC v i o
 mkCospanC = curry CospanC
 
---mkCospanC' :: [Port (CIdx i)] -> [Port (CIdx o)] -> CospanC i o
---mkCospanC' is os = mkCospanC (Set.fromList is) (Set.fromList os)
+-- A Cospan is a co-product/co-limit
+input :: CospanC v i o -> Inputs v i
+input (CospanC (i, _)) = i
+
+output :: CospanC v i o -> Outputs v o
+output (CospanC (_, o)) = o
 
 
 {---------------------------------------------------------------------------------
@@ -189,30 +151,45 @@ instance (Eq l, Eq v) => Eq (LCirc l v i o) where
 
 mkLC = curry LCirc
 
-input :: CospanC v i o -> Inputs v i
-input (CospanC (i, _)) = i
 
-output :: CospanC v i o -> Outputs v o
-output (CospanC (_, o)) = o
 
+{------------      Serial Composition of Cospans       --------------------------}
 
 composeLC :: (Ord v, Ord l) => LCirc l v i o -> LCirc l v o o' -> LCirc l v i o'
 composeLC (LCirc ((LG (n, e)), CospanC (i, o))) (LCirc ((LG (n', e')), CospanC (i', o'))) = mkLC lg'' cspan''
   where
-    --unifyComposablePortSets :: Inputs v i -> Outputs i -> Map NodeId (NodeId -> NodeId)
-    replacements = unifyComposablePortSets i' o 
-    lg'' = LG (mergeNodes n n' replacements, replaceEdges e e' replacements)
+    replacements = compPorts i' o 
+    lg'' = LG (compNodes n n' replacements, compEdges e e' replacements)
     o'' = map (\(Port (pid, nid)) -> case Map.lookup nid replacements of
                   Just nid' -> Port (pid, nid' nid)
                   Nothing -> Port (pid, nid)
               ) o'
     cspan'' = CospanC (i, o'')
 
-mkLG' ns es = mkLG (mkNodes ns) $ mkEdges es 
+compNodes :: (Ord v) => Nodes v -> Nodes v -> Map v (v -> v) -> Nodes v
+compNodes n n' chngs = Set.union n n'_
+  where
+    n'_ = foldl (\k nn-> Set.delete nn k) n' (Map.keys chngs)
 
-mkPort = curry Port
-mkInput = mkPort
-mkOutput = mkPort
+compEdges :: (Ord v, Ord l) => Edges l v -> Edges l v -> Map v (v -> v) -> Edges l v
+compEdges e1 e2 e12 = Set.union e1 e2'
+  where
+    e2' = Set.map re e2
+    re e = replaceMatching (Map.lookup (src e) e12) (Map.lookup (tgt e) e12) e
+    replaceMatching :: (Eq v) => Maybe (v -> v) -> Maybe (v -> v) -> Edge l v ->  Edge l v
+    replaceMatching (Just f) (Just g) e@(Edge (s :# t, l)) = (Edge (f s :# g t, l))
+    replaceMatching (Just f) Nothing e@(Edge (s :# t, l)) = (Edge (f s :# t, l))
+    replaceMatching Nothing (Just g) e@(Edge (s :# t, l)) = (Edge (s :# g t, l))
+    replaceMatching Nothing Nothing e@(Edge (s :# t, l)) = e
+ 
+
+compPorts ::  (Ord v) => Inputs v i -> Outputs v i -> Map v (v -> v)
+compPorts is os = Map.fromList $ map (uncurry unifyPorts) $ zip os is
+  where
+    unifyPorts :: (Eq v) => Port v a -> Port v a -> (v, (v -> v))
+    unifyPorts (Port (p, n)) (Port (p', n')) = (n', (\c -> if c == n' then n else c))
+
+
 
 
 

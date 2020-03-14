@@ -73,13 +73,13 @@ spec = do
       let n1 = Set.fromList [1, 2, 3 :: NodeId]
           n2 = Set.fromList [4, 5, 6 :: NodeId]
           m12 = Map.fromList $ [(5, \c-> if (c == 5) then 1 else c), (4, \c-> if c == 4 then 2 else c)]
-      mergeNodes n1 n2 m12 `shouldBe` (Set.fromList [1, 2, 3, 6])
+      compNodes n1 n2 m12 `shouldBe` (Set.fromList [1, 2, 3, 6])
     it "compatible lgraph edge composition" $ do
       let e1 = edges circuitEx
           e2 = edges circuitEx'
-          e12 = unifyComposablePortSets (input exCospan') (output exCospan)
+          e12 = compPorts (input exCospan') (output exCospan)
           
-      (Set.toAscList $ replaceEdges e1 e2 e12) `shouldBe` (Set.toAscList $ edges compdCirc)
+      (Set.toAscList $ compEdges e1 e2 e12) `shouldBe` (Set.toAscList $ edges compdCirc)
     it "compatible lCirc composition" $ do
       let
         compdCospan :: CospanC NodeId One Three
