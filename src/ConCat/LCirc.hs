@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -20,7 +22,6 @@ import ConCat.Category
 import ConCat.Pair
 import ConCat.Rep
 import GHC.Generics (Generic)
-import Data.Bifunctor
 import Data.Finite
 import GHC.TypeLits
 import qualified Data.Set as Set
@@ -30,25 +31,36 @@ import Data.Map.Strict (Map(..))
 import ConCat.Circuit
 import Data.List
 import Data.Maybe
-import ConCat.Misc ((:*))
-
+import ConCat.Misc ((:*), (:+))
+import Data.Bifunctor hiding (first, second)
 -- A category where the morphisms are circuits made of wires with circuit elemtns on them
 
-newtype VI = VI (Pair R) deriving (Show, Generic)
+type NodeId = Int
 
-instance Eq (VI) where
-  (VI (a :# b)) == (VI (a' :# b')) = a == a' && b == b'
+type VI = VI' NodeId R
 
-instance Ord VI where
-  compare (VI (a :# b)) (VI (a' :# b')) = compare (a, b) (a', b')
+newtype VI' i r = VI (i, Pair r) deriving (Show, Generic)
 
-instance HasRep VI where
-  type Rep (VI) = R :* R
-  repr (VI a) = repr a
-  abst (v, i) = VI (v :# i)
+mkVI :: NodeId -> VI
+mkVI i = VI (i, 0 :# (0 :: Double))
 
-type LC = LCirc CircEl VI
+tag :: VI -> NodeId
+tag (VI (n, _)) = n
 
+instance (Eq i, Eq r) => Eq (VI' i r) where
+  (VI (p, a :# b)) == (VI (p', a' :# b')) = p == p' && a == a' && b == b'
+
+instance (Ord i, Ord r) => Ord (VI' i r) where
+  compare (VI (p, a :# b)) (VI (p', a' :# b')) = compare (a, b) (a', b')
+
+instance (HasRep i, HasRep r) => HasRep (VI' i r) where
+  type Rep (VI' i r) = (i, r, r)
+  repr (VI (p, a :# b)) = (p, a, b)
+  abst (p, v, i) = VI (p, v :# i)
+
+
+instance Bifunctor (VI') where
+  bimap f g (VI (idx, v :# i)) = VI (f idx, g v :# g i)
 
 
 {----------------------------------------------------------------------------------------
@@ -63,13 +75,27 @@ type R = Double
 
 newtype LG l v = LG { runLG :: (Nodes v, Edges l v) } deriving (Eq, Ord, Show, Generic)
 
+instance Bifunctor LG where
+  bimap f g (LG (ns, es)) = LG (fmap g ns, (bimap f g es))
+
 instance (HasRep l, HasRep v) => HasRep (LG l v) where
   type Rep (LG l v) = LG l v
   abst = id
   repr = id
 
 
-newtype Edges l v = Edges { getEdges :: Set (Edge l v) } deriving (Eq, Ord, Show, Generic)
+newtype Edges l v = Edges { getEdges :: [Edge l v] } deriving (Eq, Ord, Show, Generic)
+
+instance Bifunctor Edges where
+  bimap f g (Edges es) = Edges $ map (bimap f g) es 
+
+
+toEdgeSet :: (OkLV l v) => Edges l v -> Set (Edge l v)
+toEdgeSet = Set.fromList . getEdges
+
+fromEdgeSet :: (OkLV l v) => Set (Edge l v) -> Edges l v
+fromEdgeSet = Edges . Set.toList
+
 
 instance (HasRep l, HasRep v) => HasRep (Edges l v) where
   type Rep (Edges l v) = Edges l v
@@ -77,8 +103,14 @@ instance (HasRep l, HasRep v) => HasRep (Edges l v) where
   repr = id
 
 
-type Nodes v = Set v
+newtype Nodes v = Nodes [v] deriving (Functor, Generic, Eq, Ord, Show)
 
+
+fromNodeSet :: (OkV v) => Set v -> Nodes v
+fromNodeSet = Nodes . Set.toList
+
+toNodeSet :: (OkV v) => Nodes v -> Set v
+toNodeSet (Nodes vs) = Set.fromList vs
 
 nodes :: LG l v -> Nodes v
 nodes = fst . runLG
@@ -92,13 +124,16 @@ mkLG = curry LG
 mkLG' ns es = mkLG (mkNodes ns) $ mkEdges es
 
 mkNodes :: (Ord v) => [v] -> Nodes v
-mkNodes = Set.fromList
+mkNodes = Nodes
 
 mkEdges :: (Ord v, Ord l) => [Edge l v] -> Edges l v
-mkEdges = Edges . Set.fromList
+mkEdges = Edges
 
 
 newtype Edge l v = Edge (Pair v, l) deriving (Show, Generic)
+
+instance Bifunctor Edge where
+  bimap f g (Edge (s :# t, l)) = Edge (((g s) :# (g t)), f l)
 
 instance (HasRep l, HasRep v) => HasRep (Edge l v) where
   type Rep (Edge l v) = (v, v, l)
@@ -118,6 +153,12 @@ instance (Eq l, Eq v) => Eq (Edge l v) where
 instance (Ord l, Ord v) => Ord (Edge l v) where
   (Edge (a :# b, l)) <= (Edge (a' :# b', l')) = (a, b, l) <= (a', b', l')
 
+srcId :: Edge CircEl VI -> NodeId
+srcId = tag . src 
+
+tgtId :: Edge CircEl VI -> NodeId
+tgtId = tag . tgt
+
 src :: Edge l v -> v
 src (Edge (s :# _, _)) = s
 
@@ -127,10 +168,10 @@ tgt (Edge (_ :# t, _)) = t
 label :: Edge l v -> l
 label (Edge (_, l)) = l
 
-type Labels l = Set l
+type Labels l = [l]
 
 labels :: (Ord l, Ord v) => Edges l v -> Labels l
-labels (Edges es) = Set.map label es
+labels (Edges es) = map label es
 
 
 {-------------------------
@@ -139,36 +180,40 @@ labels (Edges es) = Set.map label es
 
 
 type PortId = Int
-type NodeId = Int
 
-data Port v a = Port { unPort :: (PortId, v) } deriving (Eq, Ord, Show, Generic)
+data Port a v = Port { unPort :: (PortId, v) } deriving (Eq, Ord, Show, Generic)
 
-instance HasRep (Port v a) where
-  type Rep (Port v a) = (PortId, v)
-  abst (p, v) = mkPort p v
+instance Functor (Port a) where
+  fmap f (Port (p, v)) = Port (p, f v)
+
+instance HasRep (Port a v) where
+  type Rep (Port a v) = (PortId, v)
+  abst (p, v) = Port (p, v)
   repr (Port (p, v)) = (p, v)
 
 
-unPortF :: Port v a -> (PortId -> Maybe v)
+unPortF :: Port a v -> (PortId -> Maybe v)
 unPortF (Port (a', v)) = k
   where k a = if a == a' then
           (Just $ const v a') else
           Nothing
 
 
-unPorts :: Ord v => [Port v a] -> [Port v a]
+unPorts :: Ord v => [Port a v] -> [Port a v]
 unPorts ps = sortBy (\a b -> uncurry compare (fst . unPort $ a, fst . unPort $ b) ) ps
 
-listToFn :: [a -> b] -> ([a] -> [b])
-listToFn (f:fs) (a:as) = f a:(listToFn fs as)
-listToFn [] [] = []
 
+mkPort :: PortId -> VI -> Port i VI
 mkPort = curry Port
+
+mkInput :: PortId -> VI -> Port i VI
 mkInput = mkPort
+
+mkOutput :: PortId -> VI -> Port o VI
 mkOutput = mkPort
 
-type Inputs v a = [Port v a]
-type Outputs v a = [Port v a]
+type Inputs v a = [Port a v]
+type Outputs v a = [Port a v]
 
 
 -- :- is the LCirc morphism where Ob(C a) = n_, a where n <= Finite n'
@@ -192,12 +237,13 @@ instance Category (:-) where
 
 newtype Cospan k v = Cospan (v `k` v, v `k` v) deriving (Generic)
 
-newtype CospanC v i o = CospanC ([Port v i], [Port v o]) deriving (Eq, Ord, Show, Generic)
+newtype CospanC v i o = CospanC { unCspanC :: ([Port i v], [Port o v]) } deriving (Eq, Ord, Show, Generic)
 
 instance HasRep (CospanC v i o) where
-  type Rep (CospanC v i o) = CospanC v i o
-  abst = id
-  repr = id
+   type Rep (CospanC v i o) = CospanC v i o
+   abst = id
+   repr = id
+
 
 mkCospanC :: Inputs v i -> Outputs v o -> CospanC v i o
 mkCospanC = curry CospanC
@@ -235,21 +281,58 @@ newtype LCirc l v i o = LCirc { runLCirc :: (LG l v, CospanC v i o) } deriving (
 
 newtype LCirc' i o = LCirc' (LCirc CircEl VI i o) deriving (Eq, Ord, Show, Generic)
 
-class LC' l where
-  ok :: l -> v -> Bool
   
-
 instance (HasRep l, HasRep v) => HasRep (LCirc l v i o) where
-  type Rep (LCirc l v i o) = LCirc l v i o
-  abst = id
-  repr = id
+  type Rep (LCirc l v i o) = (LG l v, CospanC v i o)
+  abst = LCirc
+  repr (LCirc a) = a
 
+instance HasRep (LCirc' i o) where
+  type Rep (LCirc' i o) = (LG CircEl VI, CospanC VI i o)
+  abst =  LCirc' . LCirc
+  repr (LCirc' (LCirc a)) = a
 
 instance Category LCirc' where
   type Ok (LCirc') = (Ord)
   id = id
   -- (.) :: forall b c a. Ok3 (LCirc) 
   l . l' = (flip composeLC) l l'
+
+instance ProductCat LCirc' where
+  exl = exl
+  exr = exr
+  dup = dup
+
+instance AssociativePCat LCirc' where
+  lassocP = lassocP
+  rassocP = rassocP
+
+instance BraidedPCat LCirc' where
+  swapP = swapP
+
+instance MonoidalPCat LCirc' where
+  f ***  g = f *** g
+  first = first
+  second = second
+
+instance AssociativeSCat LCirc' where
+  lassocS = lassocS
+  rassocS = rassocS
+
+instance BraidedSCat LCirc' where
+  swapS = swapS
+
+instance MonoidalSCat LCirc' where
+  f +++ g = f +++ g
+  left = left
+  right = right
+
+
+instance CoproductCat LCirc' where
+  inl = inl
+  inr = inr
+  jam = jam
+
 
 -- For LCirc equality testing, in order to form a category we must have associativety
 -- this can only be obtained right now if the equivalence relation between two LCircs counts
@@ -290,24 +373,31 @@ composeLC (LCirc' (LCirc (LG (n, e), CospanC (i, o))))
   where
     replacements = compPorts i' o
     lg'' = LG (compNodes n n' replacements, compEdges e e' replacements)
-    o'' = map (\(Port (pid, nid)) -> case Map.lookup nid replacements of
-                  Just nid' -> Port (pid, nid' nid)
-                  Nothing -> Port (pid, nid)
-              ) o'
+    o'' = map quotient o'
     cspan'' = CospanC (i, o'')
+    quotient (Port(pid, vi@(VI (nid, _)))) = case Map.lookup nid replacements of
+                  Just f -> Port (pid, f vi)
+                  Nothing -> Port (pid, vi)
+              
 
-
-compNodes :: (OkV v) => Nodes v -> Nodes v -> Map v (v -> v) -> Nodes v
-compNodes n n' chngs = Set.union n n'_
+compNodes :: Nodes VI -> Nodes VI -> Map NodeId (VI -> VI) -> Nodes VI
+compNodes (Nodes []) (Nodes []) _ = Nodes []
+compNodes (Nodes a) (Nodes []) _ = Nodes a
+compNodes n (Nodes n') chngs = fromNodeSet $ Set.union (toNodeSet n) n'_
   where
-    n'_ = foldl (\k nn-> Set.delete nn k) n' (Map.keys chngs)
+    n'_ =  Set.fromList $ map apl n'
+    apl v@(VI(i, vi)) = case Map.lookup i chngs of
+                Nothing -> v
+                Just f -> f v
+    
 
-compEdges :: (OkLV l v) => Edges l v -> Edges l v -> Map v (v -> v) -> Edges l v
-compEdges (Edges e1) (Edges e2) e12 = Edges $ Set.union e1 e2'
+compEdges :: Edges CircEl VI -> Edges CircEl VI -> Map NodeId (VI -> VI) -> Edges CircEl VI
+compEdges e1 e2 e12 = fromEdgeSet $ Set.union (toEdgeSet e1) e2'
   where
-    e2' = Set.map re e2
-    re e = replaceMatching (Map.lookup (src e) e12) (Map.lookup (tgt e) e12) e
-    replaceMatching :: Maybe (v -> v) -> Maybe (v -> v) -> Edge l v ->  Edge l v
+    e2' = Set.map re (toEdgeSet e2)
+    re e = replaceMatching (Map.lookup (srcId e) e12) (Map.lookup (tgtId e) e12) e
+    replaceMatching :: Maybe (VI -> VI) -> Maybe (VI -> VI)
+                    -> Edge CircEl VI ->  Edge CircEl VI
     replaceMatching (Just f) (Just g) e@(Edge (s :# t, l)) = (Edge (f s :# g t, l))
     replaceMatching (Just f) Nothing e@(Edge (s :# t, l)) = (Edge (f s :# t, l))
     replaceMatching Nothing (Just g) e@(Edge (s :# t, l)) = (Edge (s :# g t, l))
@@ -315,12 +405,36 @@ compEdges (Edges e1) (Edges e2) e12 = Edges $ Set.union e1 e2'
 
 
 
-compPorts :: forall v i o. (OkV v) => Inputs v i -> Outputs v i -> Map v (v -> v)
+compPorts :: forall i o.  Inputs VI i -> Outputs VI i -> Map NodeId (VI -> VI)
+compPorts [] [] = Map.empty
+compPorts is [] = Map.empty
 compPorts is os = Map.fromList $ map (uncurry unifyPorts) $ zip os is
   where
-    unifyPorts :: (Eq v) => Port v a -> Port v a -> (v, (v -> v))
-    unifyPorts (Port (p, n)) (Port (p', n')) = (n', (\c -> if c == n' then n else c))
+    unifyPorts :: Port a VI -> Port a VI -> (NodeId, (VI -> VI))
+    unifyPorts (Port (p, (VI (n, vi)))) (Port (p', (VI (n', vi')))) =
+      (n', (\(VI (c, vi)) -> if c == n' then (VI (n, vi)) else (VI (c, vi))))
 
+
+toCardinal :: LCirc' i o -> LCirc' i o
+toCardinal (LCirc' (LCirc (lg, cs))) = undefined
+  where
+    es' = bimap id safeLookupVI es
+    ns' = fmap (bimap safeLookup id) ns
+    is' = map (fmap safeLookupVI) is
+    os' = map (fmap safeLookupVI) os
+    (LG (Nodes ns, es)) = lg
+    (CospanC (is, os)) = cs
+    r :: Map NodeId NodeId
+    r = Map.fromList $ zip (map tag ns) [0 :: NodeId, 1..]
+    safeLookupP :: Port i VI -> Port i VI
+    safeLookupP (Port (p, n)) = Port (p, safeLookupVI n) 
+    safeLookupVI :: VI -> VI
+    safeLookupVI vi@(VI (i, v)) = VI (safeLookup i, v)
+    safeLookup :: NodeId -> NodeId
+    safeLookup i = case n of
+      Nothing -> i
+      Just n' -> n'
+      where n = Map.lookup i r
 
 
 
@@ -363,40 +477,6 @@ instance Category LCirc where
   id = id
   (LCirc (lg, Cospan (i, o))) . (LCirc (lg', Cospan (i', o'))) = LCirc $ undefined
 
-instance AssociativePCat LCirc where
-  lassocP = undefined
-  rassocP = undefined
-
-instance BraidedPCat LCirc where
-  swapP = undefined
-
-instance MonoidalPCat LCirc where
-  LCirc f *** LCirc g = LCirc $ undefined
-  first (LCirc f) = LCirc $ undefined
-  second (LCirc g) = LCirc $ undefined
-
-instance ProductCat LCirc where
-  exl = undefined
-  exr = undefined
-  dup = undefined
-
-instance AssociativeSCat LCirc where
-  lassocS = undefined
-  rassocS = undefined
-
-instance BraidedSCat LCirc where
-  swapS = undefined
-
-instance MonoidalSCat LCirc where
-  LCirc f +++ LCirc g = LCirc $ undefined
-  left (LCirc f) = LCirc $ undefined
-  right (LCirc g) = LCirc $ undefined
-
-
-instance CoproductCat LCirc where
-  inl = undefined
-  inr = undefined
-  jam = undefined
 
 --}
 

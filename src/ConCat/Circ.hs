@@ -44,7 +44,7 @@ import ConCat.Free.VectorSpace
 import Data.Vector.Sized (Vector)
 
 import ConCat.Utils
-import ConCat.LCirc (CircEl(..), LG(..), Edge(..), VI(..), LCirc, R)
+import ConCat.LCirc (CircEl(..), LG(..), Edge(..), VI(..), LCirc'(..), R, CospanC(..))
 
 
 
@@ -71,9 +71,15 @@ instance (GenBuses l, GenBuses v) => GenBuses (LG l v) where
   ty = tyRep @ (LG l v)
   unflattenB' = genUnflattenB'
 
-instance (GenBuses l, GenBuses v) => GenBuses (LCirc l v i o) where
+
+instance GenBuses (CospanC v i o) where
   genBuses' = genBusesRep'
-  ty = tyRep @ (LCirc l v i o)
+  ty = tyRep @ (CospanC v i o)
+  unflattenB' = genUnflattenB'
+
+instance GenBuses (LCirc' i o) where
+  genBuses' = genBusesRep'
+  ty = tyRep @ (LCirc' i o)
   unflattenB' = genUnflattenB'
 
 
