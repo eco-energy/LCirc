@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Exp where
 
 import Algebra.Graph.Labelled
@@ -16,7 +17,8 @@ import ConCat.Category
 import ConCat.Misc
 import ConCat.TArr
 import Data.Bifunctor
-
+import Data.Map.Strict (Map(..))
+import qualified Data.Map.Strict as Map
 
 
 data Node = Node
@@ -53,13 +55,13 @@ instance Monoid El where
 newtype LGraph = LGraph (Graph El Node)
   deriving (Eq, Ord, Generic)
 
-newtype Cospan i o = Cospan { unCospan :: (Arr i Node) :* (Arr o Node) }
+newtype Cospan i o = Cospan { unCospan :: (Arr i [Node]) :* (Arr o [Node]) }
 -- We need a functor to go from
 -- LGraph -> Cosp
-inputs :: Cospan i o -> Arr i Node
+inputs :: Cospan i o -> Arr i [Node]
 inputs = fst . unCospan
 
-outputs :: Cospan i o -> Arr o Node
+outputs :: Cospan i o -> Arr o [Node]
 outputs = snd . unCospan
 
 composeCospan :: Cospan i o -> Cospan o o' -> (Cospan i o', Arr o (Node, Node))
@@ -67,7 +69,18 @@ composeCospan c@(Cospan (i, o)) c'@(Cospan (i', o')) = (Cospan (i, o'), apex)
   where
     apex = undefined
 
+
+
+-- Circ is a morphism in the category LCirc, and the objects
+-- are sets of Natural Numbers, here represented by i o
 newtype Circ i o = Circ { unCirc :: (LGraph, Cospan i o) } 
+
+
+
+type Merger o = Arr o Node -> Arr o Node -> Arr o (Node, Node)
+
+mergeP :: Merger o
+mergeP o i' = undefined -- fmap o i'
 
 -- We need an empty cospan to define the Id on Circ
 
