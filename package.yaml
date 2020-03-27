@@ -33,6 +33,7 @@ dependencies:
 - vector-sized
 - newtype-generics
 - algebraic-graphs
+- mtl
 library:
   source-dirs: src
 
