@@ -87,17 +87,24 @@ learn r s a pa pr = (k, pa, pr)
 
 
 -- derivative of the reward with respect to the action
+-- TODO: If I can add pa and pr to Kibutz then dpa will allow me to
+-- update the weights as well.
 dpa
   :: (pr -> s -> a -> r)
      -> (pa -> s -> a)
      -> s
      -> pr
      -> pa
-     -> Kibutz r s a :* R.L s (Kibutz () s a) (Kibutz r s a)
+     -- this type-signature is broken to be fixed.
+     -- remove pa () from the first deriv and pa pr from the second
+     -> Kibutz r s a :* R.L s (Kibutz () s a pa ()) (Kibutz r s a pa pr)
 dpa r a s pr pa = AD.andDer (reward r pr) (action a pa $ state s)
     
 
+
 {--
+There is a category instance here where a morphism
+is from Kibutz r s a -> Kibutz r s' a'
 instance Category (Kibutz r) where
   id = id
   (State sn s) . (State sn' s') = State $ sn' s'
@@ -105,9 +112,3 @@ instance Category (Kibutz r) where
     where
       s'' = sn (act s')
 --}
--- the gradient is described over a field f,
--- via a linspace representation formed over
--- it by a containerization within
--- s and a.
---gradF' :: forall s a b. (V.HasV s a) => (a -> s) -> a -> a
---gradF' = AD.gradF
