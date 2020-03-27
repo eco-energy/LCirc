@@ -33,6 +33,8 @@ import Data.List
 import Data.Maybe
 import ConCat.Misc ((:*), (:+))
 import Data.Bifunctor hiding (first, second)
+import ConCat.ADFun
+
 -- A category where the morphisms are circuits made of wires with circuit elemtns on them
 
 type NodeId = Int
