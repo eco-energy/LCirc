@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# OPTIONS_GHC -fplugin=ConCat.Plugin #-}
 {-# OPTIONS_GHC -O2 #-}
@@ -19,6 +20,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
+import Data.Key
+
 import Prelude hiding ((.), id, const)
 import qualified ConCat.RAD as AD
 import qualified ConCat.Free.Affine as A
@@ -35,6 +38,13 @@ import GHC.Generics hiding (R)
 import ConCat.Misc hiding (R)
 import ConCat.Category
 import ConCat.Deep
+
+import ConCat.TArr
+
+
+type PConn a b c d = (C3 Foldable a b c, C3 Zip a b c, C3 Functor b c d)
+
+--type PType f = forall f s. (Functor f, Foldable f, Zip f) => (f --+ f) :*: (f s --+ f s) s
 
 -- s is a container type, a is a container and b is the contained? 
 --type Objective s a r = V.V s a b
@@ -73,7 +83,7 @@ type KVs r s a = KV [R] r s a
 
 type RKVs = KVs R R R
 
---test :: (V.HasV r s, V.HasV r a, V.HasV r r) => s -> a -> r -> V.V r s a
+ --(V.HasV r s, V.HasV r a, V.HasV r r) => s -> a -> r -> V.V r s a
 test r s a = (V.toV s, V.toV a, V.toV r) 
 
 instance (V.HasV R s, V.HasV R a, V.HasV R r) => V.HasV R (Kibutz r s a) where
@@ -156,3 +166,14 @@ instance Category (Kibutz r) where
     where
       s'' = sn (act s')
 --}
+
+{--
+Probability Density Distillation, a new method for
+training a parallel feed-forward network from a trained WaveNet with no significant
+difference in quality
+--}
+
+
+-- Wavenet
+-- autoregressive deep generative model
+-- 

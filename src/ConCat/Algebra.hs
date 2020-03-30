@@ -38,6 +38,27 @@ data Kibutz r s a where
   Reward :: (s -> a -> r) -> Kibutz () s a -> Kibutz r s a
   T :: r -> s -> a -> (Kibutz r s a)
 
+type State' f z = (V.Zeroable f, V.HasV z (f z))
+type Action' f z = forall f z. (State' f z) => I.Delta ( f z)
+type Reward' state action = R 
+
+{--
+data Kbtz r s a = S ((s -> a -> s) :* (s :* (() :* s :* ())))
+                | A ((s -> a) :* (s :* (() :* s :* a)))
+                | R ((s -> a -> r) :* ((s :* (r :* s :* a))))
+                deriving (Generic)
+--}
+
+class MultiHeadAttention a b where
+  encoder :: (a -> a -> a -> b) -> (a -> b) -> a -> b
+  decoder :: a -> a -> a -> b -> a
+
+instance (Show r, Show s, Show a) => Show (Kibutz r s a) where
+  show (State s' s) = show s
+  show (Action a' (State s' s)) = show (a' s)
+  show (Reward r' a@(Action a' (State _ s))) = show (r' s $ a' s)
+  show (T r s a) = show (r, s, a)
+
 instance R.HasRep (Kibutz r s a) where
   type Rep (Kibutz r s a) = (r, s, a)
   abst (r, s, a) = (T r s a)
@@ -97,11 +118,26 @@ dpa
      -> pa
      -- this type-signature is broken to be fixed.
      -- remove pa () from the first deriv and pa pr from the second
-     -> Kibutz r s a :* R.L s (Kibutz () s a pa ()) (Kibutz r s a pa pr)
+     -> Kibutz r s a :* R.L s (Kibutz () s a) (Kibutz r s a)
 dpa r a s pr pa = AD.andDer (reward r pr) (action a pa $ state s)
-    
 
+r :: R -> R -> R -> R
+r params st ac = params + ac + st
 
+a :: R -> R -> R
+a params s = params + s
+
+s = 10 :: R
+
+pr = 5 :: R
+
+pa = 2 :: R
+
+dpa' :: R -> Kibutz R R R :* R.L R (Kibutz () R R) (Kibutz R R R)
+dpa' = dpa r a s pa
+
+main = do
+  print $ dpa' pa
 {--
 There is a category instance here where a morphism
 is from Kibutz r s a -> Kibutz r s' a'

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Algebras where
@@ -10,6 +11,8 @@ import ConCat.Category
 import CatUtils
 import qualified Data.Text as Text
 import Data.Text (Text(..))
+import GHC.Generics
+
 -- Two parts to an algebra:
 -- 1) creation of expression
 -- 2) evaluation
@@ -20,6 +23,7 @@ data Expr = Plus  Expr Expr
           | Times Expr Expr
           | Const Double
           | Var   String
+          deriving Generic
 
 expr :: Expr
 expr = Plus (Times (Const 2)
@@ -39,11 +43,12 @@ reval (Times x y) = (*) <$> (reval x) <*> (reval y)
 -- recursive process of constructing expressions can be decomposed into non-recursive steps.
 -- Non-recursive type constructor with a placeholder for recursive bits
 
+
 data ExprF a = PlusF  a a
              | TimesF a a
              | ConstF a
              | VarF   String
-             deriving (Eq, Show)
+             deriving (Eq, Show, Generic)
 {--
 type Leaf = ExprF Void
 

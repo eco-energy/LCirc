@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -12,6 +14,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module ConCat.LCirc where
 
 import Prelude hiding (id, (.), uncurry, curry, const)
@@ -34,6 +37,7 @@ import Data.Maybe
 import ConCat.Misc ((:*), (:+))
 import Data.Bifunctor hiding (first, second)
 import ConCat.ADFun
+import qualified ConCat.TArr as T
 
 -- A category where the morphisms are circuits made of wires with circuit elemtns on them
 
@@ -279,13 +283,40 @@ instance HasRep CircEl where
   abst (3, el) = Ind el
 
     
-newtype LCirc l v i o = LCirc { runLCirc :: (LG l v, CospanC v i o) } deriving (Eq, Ord, Show, Generic)
+newtype LCirc i o l v = LCirc { runLCirc :: (LG l v, CospanC v i o) } deriving (Eq, Ord, Show, Generic)
 
-newtype LCirc' i o = LCirc' (LCirc CircEl VI i o) deriving (Eq, Ord, Show, Generic)
+newtype LCirc' i o = LCirc' (LCirc i o CircEl VI) deriving (Eq, Ord, Show, Generic)
 
+instance Bifunctor (LCirc i o) where
+  bimap :: forall a b c d i o. (a -> b) -> (c -> d) -> LCirc i o a c -> LCirc i o b d
+  bimap f g (LCirc (LG (nodes, edges), CospanC (i, o))) = LCirc (LG (n', e'), CospanC (i', o'))
+    where
+      n' :: Nodes d
+      n' = fmap g nodes
+      e' :: Edges b d
+      e' = bimap f g edges
+      i' :: [Port i d]
+      i' = map (fmap g) i
+      o' :: [Port o d]
+      o' = map (fmap g) o
+
+instance Bifunctor (LCirc') where
+  bimap :: forall i o i' o'. (i -> i') -> (o -> o') -> LCirc' i o -> LCirc' i' o'
+  bimap f g (LCirc' (LCirc ((LG (n, e)), (CospanC (i, o))))) = LCirc' (LCirc ((LG (n', e')), CospanC (map i' i, map o' o)))
+    where
+      n' :: Nodes VI
+      n' = id n
+      e' :: Edges CircEl VI
+      e' = id e
+      i' :: Port i VI -> Port i' VI
+      i' = changePort
+      o' :: Port o VI -> Port o' VI
+      o' = changePort
+      changePort :: Port a VI -> Port a' VI
+      changePort (Port (pid, vi)) = mkPort pid vi
   
-instance (HasRep l, HasRep v) => HasRep (LCirc l v i o) where
-  type Rep (LCirc l v i o) = (LG l v, CospanC v i o)
+instance (HasRep l, HasRep v) => HasRep (LCirc i o l v ) where
+  type Rep (LCirc i o l v) = (LG l v, CospanC v i o)
   abst = LCirc
   repr (LCirc a) = a
 
@@ -439,6 +470,23 @@ toCardinal (LCirc' (LCirc (lg, cs))) = undefined
       where n = Map.lookup i r
 
 
+
+endoF :: (Bifunctor k) => (a -> a') -> (b -> b') ->  k a b -> k a' b'
+endoF f g = bimap f g
+
+endoLC :: (a -> a') -> (b -> b') -> (LCirc i o a b) -> (LCirc i o a' b')
+endoLC = endoF
+
+comp :: (LCirc i o a b) -> (LCirc i' o' a b) -> (LCirc i o' a b)
+comp = undefined
+
+
+class (T.HasFin a, T.HasFin b) => OkLC a b c
+
+instance Category (LCirc a b) where
+  type Ok (LCirc a b) = (OkLC a b)
+  id = id
+  --(.) = comp
 
 {----------------------------------------------------------------------------------------
          Category Instances

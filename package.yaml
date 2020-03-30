@@ -34,6 +34,10 @@ dependencies:
 - newtype-generics
 - algebraic-graphs
 - mtl
+- ghc-prim
+- keys
+- random
+- transformers
 library:
   source-dirs: src
 
@@ -45,6 +49,8 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -fplugin=ConCat.Plugin
+    - -O2
     dependencies:
     - lCirc
 

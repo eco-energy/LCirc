@@ -16,7 +16,6 @@ import ConCat.Pair
 import Control.Applicative
 import Control.Monad.IO.Class
 
-
 instance (Arbitrary v) => Arbitrary (Pair v) where
   arbitrary = (:#) <$> arbitrary <*> arbitrary
 
@@ -89,51 +88,50 @@ spec = do
     it "composition obeys left id" $ do
       --x <- liftIO ((arbs 1) :: IO [LCirc' i o])
       --quickCheck (leftId composeLC $ head x)
-      1 `shouldBe` 1
-{--
-    let
-      unitR :: LG CircEl NodeId
-      unitR = mkLG' [1, 2] [mkEdge 1 2 $ Res 0]
+    it "LCirc composition works"
+      let
+        unitR :: LG CircEl NodeId
+        unitR = mkLG' [1, 2] [mkEdge 1 2 $ Res 0]
 
 
-      r3 :: LG CircEl NodeId
-      r3 = mkLG' [1, 2] [mkEdge 1 2 $ Res 3] 
+        r3 :: LG CircEl NodeId
+        r3 = mkLG' [1, 2] [mkEdge 1 2 $ Res 3] 
 
-      circuitEx :: LG CircEl NodeId
-      circuitEx = mkLG' [1, 2, 3, 4] [ mkEdge 1 4 $ Res 2
-                               , mkEdge 1 4 $ Cap 3
-                               , mkEdge 1 2 $ Res 1
-                               , mkEdge 2 3 $ Ind 1
-                               , mkEdge 3 4 $ Res 1
-                               ] 
+        circuitEx :: LG CircEl NodeId
+        circuitEx = mkLG' [1, 2, 3, 4] [ mkEdge 1 4 $ Res 2
+                                 , mkEdge 1 4 $ Cap 3
+                                 , mkEdge 1 2 $ Res 1
+                                 , mkEdge 2 3 $ Ind 1
+                                 , mkEdge 3 4 $ Res 1
+                                 ] 
 
-      circuitEx' :: LG CircEl NodeId
-      circuitEx' = mkLG' [5, 6, 7] [ mkEdge 5 6 $ Res 5
-                             , mkEdge 6 7 $ Res 8
-                             ]
-
-
-      exCospan :: CospanC VI VI VI
-      exCospan = mkCospanC
-        [(mkInput 1 1)]
-        [ (mkOutput 1 4)
-        , (mkOutput 2 4)] 
-
-      exCospan' :: CospanC VI VI VI 
-      exCospan' = mkCospanC
-        [(mkInput 1 5), (mkInput 2 7)]
-        [(mkOutput 1 5), (mkOutput 2 7)]
+        circuitEx' :: LG CircEl NodeId
+        circuitEx' = mkLG' [5, 6, 7] [ mkEdge 5 6 $ Res 5
+                               , mkEdge 6 7 $ Res 8
+                               ]
 
 
-      compdCirc :: LG CircEl NodeId
-      compdCirc = mkLG' [1, 2, 3, 4, 6] [ mkEdge 1 4 $ Res 2
-                                        , mkEdge 1 4 $ Cap 3
-                                        , mkEdge 1 2 $ Res 1
-                                        , mkEdge 2 3 $ Ind 1
-                                        , mkEdge 3 4 $ Res 1
-                                        , mkEdge 4 6 $ Res 5
-                                        , mkEdge 4 6 $ Res 8
-                                        ]
+        exCospan :: CospanC VI VI VI
+        exCospan = mkCospanC
+          [(mkInput 1 1)]
+          [ (mkOutput 1 4)
+          , (mkOutput 2 4)] 
+
+        exCospan' :: CospanC VI VI VI 
+        exCospan' = mkCospanC
+          [(mkInput 1 5), (mkInput 2 7)]
+          [(mkOutput 1 5), (mkOutput 2 7)]
+
+
+        compdCirc :: LG CircEl NodeId
+        compdCirc = mkLG' [1, 2, 3, 4, 6] [ mkEdge 1 4 $ Res 2
+                                          , mkEdge 1 4 $ Cap 3
+                                          , mkEdge 1 2 $ Res 1
+                                          , mkEdge 2 3 $ Ind 1
+                                          , mkEdge 3 4 $ Res 1
+                                          , mkEdge 4 6 $ Res 5
+                                          , mkEdge 4 6 $ Res 8
+                                          ]
       
     it "compatible lgraph node composition" $ do
       let
