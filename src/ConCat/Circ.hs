@@ -44,12 +44,17 @@ import ConCat.Free.VectorSpace
 import Data.Vector.Sized (Vector)
 
 import ConCat.Utils
-import ConCat.LCirc (CircEl(..), LG(..), Edge(..), VI(..), LCirc'(..), R, CospanC(..))
+import ConCat.LCirc (CircEl(..), LG(..), Edge(..), VI(..), LCirc'(..), R, CospanC(..), NodeId(..))
 
 
 
 
 a = runCirc "affRelu" $ A.toCcc $ affRelu @(Vector 2) @(Vector 3) @R
+
+instance GenBuses NodeId where
+  genBuses' = genBusesRep'
+  ty = tyRep @NodeId
+  unflattenB' = genUnflattenB'
 
 instance GenBuses VI where
   genBuses' = genBusesRep'
@@ -90,4 +95,3 @@ instance GenBuses (LCirc' i o) where
 rc :: (CircEl :> VI) -> IO ()
 rc = runCirc "name" 
 
-rcR1 = undefined
