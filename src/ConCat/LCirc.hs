@@ -41,7 +41,12 @@ import qualified ConCat.TArr as T
 
 -- A category where the morphisms are circuits made of wires with circuit elemtns on them
 
-type NodeId = Int
+newtype NodeId = NodeId Int deriving (Eq, Ord, Show, Generic, Enum, Num)
+
+instance HasRep NodeId where
+  type Rep NodeId = Int
+  abst  = NodeId
+  repr (NodeId i) = i
 
 type VI = VI' NodeId R
 
@@ -209,37 +214,24 @@ unPorts :: Ord v => [Port a v] -> [Port a v]
 unPorts ps = sortBy (\a b -> uncurry compare (fst . unPort $ a, fst . unPort $ b) ) ps
 
 
-mkPort :: PortId -> VI -> Port i VI
+mkPort :: PortId -> v -> Port i v
 mkPort = curry Port
 
-mkInput :: PortId -> VI -> Port i VI
+mkVIPort :: PortId -> NodeId -> Port i VI
+mkVIPort p n = mkPort p $ mkVI n
+
+mkInput :: PortId -> v -> Port i v
 mkInput = mkPort
 
-mkOutput :: PortId -> VI -> Port o VI
+mkInput' = mkVIPort
+mkOutput' = mkVIPort
+
+mkOutput :: PortId -> v -> Port o v
 mkOutput = mkPort
+
 
 type Inputs v a = [Port a v]
 type Outputs v a = [Port a v]
-
-
--- :- is the LCirc morphism where Ob(C a) = n_, a where n <= Finite n'
--- along with a Representable Functor over Ob(LCirc)
-
---data a :- b = C { unC :: KleisliM LCirc Source a Target a }
-
-
-{--
-cospan :: i -> o -> z -> ((i :- z), (o :- z))
-cospan = undefined
-
-mkSpider plan = sow :- plan
-  where
-    sow (Id a,  Id b) = foldlWithKey
-
-instance Category (:-) where
-  id = uncurry . Id
---}
-
 
 newtype Cospan k v = Cospan (v `k` v, v `k` v) deriving (Generic)
 
@@ -253,6 +245,13 @@ instance HasRep (CospanC v i o) where
 
 mkCospanC :: Inputs v i -> Outputs v o -> CospanC v i o
 mkCospanC = curry CospanC
+
+
+mkCospanLG :: [v] -> [v] -> CospanC v i o
+mkCospanLG inputs outputs = CospanC (iports, oports)
+  where
+    iports = map (uncurry mkInput) $ zip [1..] inputs
+    oports = map (uncurry mkOutput) $ zip [1..] outputs
 
 
 -- A Cospan is a co-product/co-limit
@@ -270,6 +269,12 @@ output (CospanC (_, o)) = o
     where the names of the nodes of LGraph can be transformed by any mapping (v -> v)
     without affecting the equality of two LCircs.
 ---------------------------------------------------------------------------------}
+
+{----------------------------------------------------------------------------------------
+         Circuit Elements
+----------------------------------------------------------------------------------------}
+
+
 
 data CircEl = Res R | Cap R | Ind R deriving (Eq, Ord, Show, Generic)
 
@@ -315,6 +320,34 @@ instance Bifunctor (LCirc') where
       changePort :: Port a VI -> Port a' VI
       changePort (Port (pid, vi)) = mkPort pid vi
   
+
+{----------------------------------------------------------------------------------------
+         Category Instances
+-----------------------------------------------------------------------------------------}
+
+
+-- Given a category C, a cospan in C is a diagram of the form
+-- X -f> N <g- Y
+-- This is a mapping in to the set of nodes in some network where f and g pick out the inputs and outputs.
+
+
+-- Monoidal Category
+
+-- the tensor product: <> :: C x C -> C
+-- the unit object I in Ob(C)
+-- associator, a natural transformation : (x <> y) <> z -> x <> (y <> z)
+-- the left unitor : I <> x -> x
+-- the right unitor : x <> I -> x
+
+-- A monoidal category is Strict if the associator, the left unutir and the right unitor are identities
+
+-- Tensoring allows setting objects side by side and also morphisms side by side with each other.
+
+-- Braided Monoidal Category
+-- B_xy : x <> y -> y <> x
+-- Symmetric if B_yx . B_xy = id(x<>y)
+
+
 instance (HasRep l, HasRep v) => HasRep (LCirc i o l v ) where
   type Rep (LCirc i o l v) = (LG l v, CospanC v i o)
   abst = LCirc
@@ -328,7 +361,6 @@ instance HasRep (LCirc' i o) where
 instance Category LCirc' where
   type Ok (LCirc') = (Ord)
   id = id
-  -- (.) :: forall b c a. Ok3 (LCirc) 
   l . l' = (flip composeLC) l l'
 
 instance ProductCat LCirc' where
@@ -378,15 +410,6 @@ instance CoproductCat LCirc' where
     -- If the equivalence relation holds after the bijection, then the graphs are equivalent.
     -- The reason we can
 
-{--
-instance (Show l, Show v) => Show (LCirc l v i o) where
-  show (LCirc (lg, CospanC (i, o))) = "LCirc: " <> (show lg)
-
-instance (Eq l, Eq v) => Eq (LCirc l v i o) where
-  (LCirc (lg, CospanC (i, o))) == (LCirc (lg', CospanC (i', o'))) = lg == lg'
-    && i == i'
-    && o' == o'
---}
 mkLC = curry LCirc
 
 mkLC' :: forall i o. LG CircEl VI -> CospanC VI i o -> LCirc' i o 
@@ -404,31 +427,37 @@ composeLC :: forall i o o'.  LCirc' i o -> LCirc' o o' -> LCirc' i o'
 composeLC (LCirc' (LCirc (LG (n, e), CospanC (i, o))))
            (LCirc' (LCirc (LG (n', e'), CospanC (i', o')))) = mkLC' lg'' cspan''
   where
-    replacements = compPorts i' o
-    lg'' = LG (compNodes n n' replacements, compEdges e e' replacements)
+    (lm, rm) = compPorts i' o
+    lg'' = LG (compNodes n n' lm rm, compEdges e e' lm rm)
     o'' = map quotient o'
     cspan'' = CospanC (i, o'')
-    quotient (Port(pid, vi@(VI (nid, _)))) = case Map.lookup nid replacements of
+    quotient (Port(pid, vi@(VI (nid, _)))) = case Map.lookup nid (Map.union lm rm) of
                   Just f -> Port (pid, f vi)
                   Nothing -> Port (pid, vi)
-              
 
-compNodes :: Nodes VI -> Nodes VI -> Map NodeId (VI -> VI) -> Nodes VI
-compNodes (Nodes []) (Nodes []) _ = Nodes []
-compNodes (Nodes a) (Nodes []) _ = Nodes a
-compNodes n (Nodes n') chngs = fromNodeSet $ Set.union (toNodeSet n) n'_
+compNodes :: Nodes VI -> Nodes VI -> Map NodeId (VI -> VI) -> Map NodeId (VI -> VI) -> Nodes VI
+compNodes (Nodes []) (Nodes []) _ _ = Nodes []
+compNodes (Nodes a) (Nodes []) lma _ = Nodes $ map (safeRep lma) a
+compNodes (Nodes n) (Nodes n') lma rma = fromNodeSet $ Set.union ln rn
   where
-    n'_ =  Set.fromList $ map apl n'
-    apl v@(VI(i, vi)) = case Map.lookup i chngs of
-                Nothing -> v
-                Just f -> f v
-    
+    ln = Set.fromList $ map (safeRep lma) n
+    rn =  Set.fromList $ map (safeRep rma) n'
 
-compEdges :: Edges CircEl VI -> Edges CircEl VI -> Map NodeId (VI -> VI) -> Edges CircEl VI
-compEdges e1 e2 e12 = fromEdgeSet $ Set.union (toEdgeSet e1) e2'
+safeRep :: Map NodeId (VI -> VI) -> VI -> VI
+safeRep m v@(VI(i, vi)) = case Map.lookup i m of
+                        Nothing -> v
+                        Just f -> f v    
+
+compEdges :: Edges CircEl VI
+  -> Edges CircEl VI
+  -> Map NodeId (VI -> VI)
+  -> Map NodeId (VI -> VI)
+  -> Edges CircEl VI
+compEdges e1 e2 lm rm = fromEdgeSet $ Set.union e1' e2'
   where
-    e2' = Set.map re (toEdgeSet e2)
-    re e = replaceMatching (Map.lookup (srcId e) e12) (Map.lookup (tgtId e) e12) e
+    e1' = Set.map (re lm) (toEdgeSet e1)
+    e2' = Set.map (re rm) (toEdgeSet e2)
+    re m e = replaceMatching (Map.lookup (srcId e) m) (Map.lookup (tgtId e) m) e
     replaceMatching :: Maybe (VI -> VI) -> Maybe (VI -> VI)
                     -> Edge CircEl VI ->  Edge CircEl VI
     replaceMatching (Just f) (Just g) e@(Edge (s :# t, l)) = (Edge (f s :# g t, l))
@@ -438,21 +467,39 @@ compEdges e1 e2 e12 = fromEdgeSet $ Set.union (toEdgeSet e1) e2'
 
 
 
-compPorts :: forall i o.  Inputs VI i -> Outputs VI i -> Map NodeId (VI -> VI)
-compPorts [] [] = Map.empty
-compPorts is [] = Map.empty
-compPorts is os = Map.fromList $ map (uncurry unifyPorts) $ zip os is
+compPorts :: forall i o.  Inputs VI i -> Outputs VI i -> (Map NodeId (VI -> VI), Map NodeId (VI -> VI))
+--compPorts [] [] = (Map.empty, Map.empty)
+--compPorts is [] = (Map.empty, Map.empty)
+compPorts is os = unifyPorts os is
+  -- inputs is [Port (p, n)] and so is outputs.
+  -- we want to IDENTIFY.
+  -- IDENTIFY collapses nodes.
+  -- each port can be connected to multiple inputs and multiple outputs
+  -- We choose the label of the ordinally lowest output as the label of the identified node
+  -- Then we replace the labels of all the nodes identified with that port with the label
+  -- of the identified node.
+
+unifyPorts :: Outputs VI i -> Inputs VI i -> (Map NodeId (VI -> VI), Map NodeId (VI -> VI))
+unifyPorts [] [] = (Map.empty, Map.empty)
+unifyPorts ((Port (p, n)):os) is = (Map.union omap orec, Map.union imap irec)
   where
-    unifyPorts :: Port a VI -> Port a VI -> (NodeId, (VI -> VI))
-    unifyPorts (Port (p, (VI (n, vi)))) (Port (p', (VI (n', vi')))) =
-      (n', (\(VI (c, vi)) -> if c == n' then (VI (n, vi)) else (VI (c, vi))))
+    (orec, irec) = unifyPorts irem orem
+    ident (Port (p', i)) = p /= p'
+    o' = filter (ident) os
+    orem = filter (not . ident) os
+    i' = filter (ident) is
+    irem = filter (not . ident) is
+    idents = concat [o', i']
+    (Port (_, vLabel)) = minimumBy (\(Port (_, v)) (Port (_, v')) -> compare (tag v) (tag v')) idents
+    omap = Map.fromList [(nid, (\v -> if v == v' then vLabel else v)) | (Port (_, v'@(VI(nid, _)))) <- o']
+    imap = Map.fromList [(nid, (\v -> if v == v' then vLabel else v)) | (Port (_, v'@(VI(nid, _)))) <- i']
 
 
 toCardinal :: LCirc' i o -> LCirc' i o
-toCardinal (LCirc' (LCirc (lg, cs))) = undefined
+toCardinal (LCirc' (LCirc (lg, cs))) = LCirc' $ LCirc (LG (ns', es'), CospanC (is', os'))
   where
     es' = bimap id safeLookupVI es
-    ns' = fmap (bimap safeLookup id) ns
+    ns' = Nodes $ fmap (bimap safeLookup id) ns
     is' = map (fmap safeLookupVI) is
     os' = map (fmap safeLookupVI) os
     (LG (Nodes ns, es)) = lg
@@ -471,118 +518,21 @@ toCardinal (LCirc' (LCirc (lg, cs))) = undefined
 
 
 
+
+{-------- An Endofunctor is a map from Hask-to-Hask ----------}
 endoF :: (Bifunctor k) => (a -> a') -> (b -> b') ->  k a b -> k a' b'
 endoF f g = bimap f g
 
 endoLC :: (a -> a') -> (b -> b') -> (LCirc i o a b) -> (LCirc i o a' b')
 endoLC = endoF
 
-comp :: (LCirc i o a b) -> (LCirc i' o' a b) -> (LCirc i o' a b)
-comp = undefined
-
 
 class (T.HasFin a, T.HasFin b) => OkLC a b c
 
-instance Category (LCirc a b) where
-  type Ok (LCirc a b) = (OkLC a b)
-  id = id
-  --(.) = comp
-
-{----------------------------------------------------------------------------------------
-         Category Instances
------------------------------------------------------------------------------------------}
-
-
--- Given a category C, a cospan in C is a diagram of the form
--- X -f> N <g- Y
--- This is a mapping in to the set of nodes in some network where f and g pick out the inputs and outputs.
-
-
--- Monoidal Category
-
--- the tensor product: <> :: C x C -> C
--- the unit object I in Ob(C)
--- associator, a natural transformation : (x <> y) <> z -> x <> (y <> z)
--- the left unitor : I <> x -> x
--- the right unitor : x <> I -> x
-
--- A monoidal category is Strict if the associator, the left unutir and the right unitor are identities
-
--- Tensoring allows setting objects side by side and also morphisms side by side with each other.
-
--- Braided Monoidal Category
--- B_xy : x <> y -> y <> x
--- Symmetric if B_yx . B_xy = id(x<>y)
 
 
 {--
-instance HasRep (LCirc l v i o) where
-  type Rep (LCirc l v i o) = (l, v)
-  abst = undefined
-  repr = undefined
-
-
-instance Category LCirc where
-  type Ok LCirc = Ord
-  id = id
-  (LCirc (lg, Cospan (i, o))) . (LCirc (lg', Cospan (i', o'))) = LCirc $ undefined
-
-
+identify :: [PortId, (NodeId, NodeId)] -> LG l v -> LG l v
+identify = 
 --}
 
-{----------------------------------------------------------------------------------------
-         Circuit Elements
-----------------------------------------------------------------------------------------}
-
-
-
-{-----------------------------------------------------------------------------------------
-         Graph Isomorphism
-------------------------------------------------------------------------------------------
-
-data Adjacency a = Adj [(a, [a])]
-
-data LG' l v = LG' [v] [Edge l v]
-
-
-toLG' :: LG l v -> LG' l v
-toLG' (LG (ns, (Edges es))) = LG' (Set.toAscList ns) (Set.toAscList es)
-
-isoLG :: (Ord l, Ord v) => LG l v -> LG l v -> Bool
-isoLG l l' = iso (toLG' l) (toLG' l')
-
-iso :: (Ord l, Ord v) => LG' l v -> LG' l v -> Bool
-iso g@(LG' xs ys) h@(LG' xs' ys') = length xs == length xs' &&
-                                        (labels . Edges . Set.fromList $ ys) == (labels . Edges . Set.fromList $ ys') &&
-                                        canon g == canon h
-  where
-  canon :: (Ord l, Enum v, Eq v) => LG' l v -> String
-  canon g = minimum $ map f $ perm $ length a
-     where
-        Adj a = graphToAdj g
-        v = map fst a
-        perm n = foldr (\x xs -> [i : s | i <- [1..n], s <- xs, i `notElem` s]) [[]] [1..n]
-        f p = let n = zip v p
-              in show [(snd x,
-                        sort id $ map (\x ->
-                           snd $ head $ snd $ break ((==) x . fst) n) $ snd $ find a x)
-                      | x <- sort snd n]
-        sort f n = foldr (\x xs -> let (lt, gt) = break ((<) (f x) . f) xs
-                                   in lt ++ [x] ++ gt) [] n
-        find a x = let (xs, ys) = break ((==) (fst x) . fst) a in head ys
-        graphToAdj :: (Eq v) => LG' l v -> Adjacency v
-        graphToAdj (LG' [] _)      = Adj []
-        graphToAdj (LG' (x:xs) ys) = Adj ((x, ys' >>= f) : zs)
-          where
-            ys' = map (\(Edge (s :# t, l))-> (s, t)) ys
-            f (a, b)
-              | a == x = [b]
-              | b == x = [a]
-              | otherwise = []
-            Adj zs = graphToAdj (LG' xs ys)
-
---}
--- A network, such as an electrical circuit, with m inputs and n outputs is a morphism from m to n,
--- while putting networks together in series is composition, and setting them side by side is tensoring.
-
--- Each kind of network corresponds to a mathematically natural prop.
