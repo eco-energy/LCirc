@@ -12,17 +12,15 @@ import ConCat.Additive
 -- instance Arbitrary 
 -- type R = Double
 
-errorDecreasing :: (s -> s -> s) -> (s -> s -> s) -> s -> s -> Bool
-errorDecreasing e e' s s' = ((\s s' -> e s s') s) >= ((\s s' -> e' s s') s)
+--errorDecreasing :: (s -> s -> s) -> (s -> s -> s) -> s -> s -> Bool
+--errorDecreasing e e' s s' = ((\s s' -> e s s') s) >= ((\s s' -> e' s s') s)
   
 
 monotonic :: (Num a, Arbitrary a) => Gen ([a])
 monotonic = arbitrarySatisfying (\fs -> yes fs)
   where
     yes :: [a] -> Bool
-    yes fs = scanl (<=) True fs
-    f :: a -> a -> Bool
-    f = p 
+    yes fs = undefined -- scanl (<=) True fs
 
 spec = do
   describe "Learner Can Follow a Path" $ do
