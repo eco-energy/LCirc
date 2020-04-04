@@ -38,6 +38,11 @@ dependencies:
 - keys
 - random
 - transformers
+- random-shuffle
+- hmatrix
+- linear
+- singletons
+- attoparsec
 library:
   source-dirs: src
 
