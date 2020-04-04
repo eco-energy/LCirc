@@ -147,9 +147,9 @@ pa' = 2 :: R
 --dpa' :: (Kibutz R R R :* R.L R (Kibutz () R R) (Kibutz R R R))
 l'' = l' r' s' a'
 
-dpr' = AD.andGradR (r . (l'' pa')) pr'
+dpr' = AD.gradR (r . (l'' pa')) pr'
 
-dpa' = AD.andGradR (an . (flip l'') pr') pa'
+dpa' = AD.gradR (an . (flip l'') pr') pa'
 
 {-# INLINE dpa' #-}
 
