@@ -4,6 +4,7 @@
 
 module ConCat.Circ where
 
+{--
 import ConCat.Circuit ( CircuitM, (:>)
   , Bus(..),Comp(..),Input,Output, Ty(..), busTy, Source(..), Template(..)
   , GenBuses(..), GS, genBusesRep', tyRep
@@ -95,3 +96,4 @@ instance GenBuses (LCirc' i o) where
 rc :: (CircEl :> VI) -> IO ()
 rc = runCirc "name" 
 
+--}
