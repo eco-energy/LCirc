@@ -29,30 +29,28 @@ data Node = Node
 
 
 -- This is what a morphism looks like in LCirc
-data El = Res R
-  | Cap R
-  | Ind R
-  | Series El El
-  | Parallel El El
+data El a = Res a
+  | Cap a
+  | Ind a
+  | Parallel (El a) (El a)
   deriving (Eq, Ord, Show, Generic)
 
-class Ci a where
-  join :: (a :* a) -> a
-  split :: a -> (a :* a)
-  start :: a -> a
-  end :: a -> ()
+data Ci a where
+  Join :: a -> a -> Ci (a :* a)
+  Split :: a -> Ci (a :* a)
+  Start :: a -> Ci a
+  End :: a -> Ci ()
 
 
--- We choose the semigroup to be
--- parallel because series composition
--- must obey pushout laws
-instance Semigroup El where
+type CiRLC = Ci (El R)
+
+instance Semigroup (El a) where
   a <> b = Parallel a b
 
-instance Monoid El where
+instance (Num a) => Monoid (El a) where
   mempty = Res 0
 
-newtype LGraph = LGraph (Graph El Node)
+newtype LGraph = LGraph (Graph (El R) Node)
   deriving (Eq, Ord, Generic)
 
 newtype Cospan i o = Cospan { unCospan :: (Arr i [Node]) :* (Arr o [Node]) }
@@ -68,7 +66,6 @@ composeCospan :: Cospan i o -> Cospan o o' -> (Cospan i o', Arr o (Node, Node))
 composeCospan c@(Cospan (i, o)) c'@(Cospan (i', o')) = (Cospan (i, o'), apex)
   where
     apex = undefined
-
 
 
 -- Circ is a morphism in the category LCirc, and the objects

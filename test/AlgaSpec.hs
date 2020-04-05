@@ -13,15 +13,14 @@ instance Arbitrary (LGraph) -- where
 instance EqProp (LGraph) where
   a =-= b = eq a b
 
-instance Arbitrary El where
+instance (Arbitrary a) => Arbitrary (El a) where
   arbitrary = oneof [ Res <$> arbitrary
                     , Ind <$> arbitrary
                     , Cap <$> arbitrary
-                    , Series <$> arbitrary <*> arbitrary
                     , Parallel <$> arbitrary <*> arbitrary
                     ]  
 
-instance EqProp El where
+instance Eq a => EqProp (El a) where
   (=-=) = eq
 
 instance EqProp Node where
@@ -33,4 +32,4 @@ instance Arbitrary Node where
 spec = do
   describe "Category instance for a labelled graph based on Alga" $ do
     it "monoid laws for Circ" $ do
-      verboseBatch (monoid (undefined :: (El)))
+      verboseBatch (monoid (undefined :: (El Int)))
