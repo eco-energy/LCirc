@@ -20,7 +20,7 @@ import qualified Prelude as P
 import ConCat.Category
 import ConCat.Pair
 import ConCat.Rep
-import GHC.Generics (Generic)
+import GHC.Generics ((:.:)(..), Generic)
 import Data.Bifunctor
 import Data.Finite
 import GHC.TypeLits
@@ -59,15 +59,24 @@ type LC = LCirc RLC VI
 data RLC = Res R | Cap R | Ind R deriving (Eq, Ord, Show, Generic)
 
 instance HasRep RLC where
-  type Rep (RLC) = (R, R, R) 
-  repr (Res r) = (r, 0, 0)
-  repr (Cap c) = (0, c, 0)
-  repr (Ind i) = (0, 0, i)
-  abst (r, 0, 0) = Res r
-  abst (0, c, 0) = Cap c
-  abst (0, 0, i) = Ind i
+  type Rep (RLC) = (Maybe R, Maybe R, Maybe R)
+  abst (Just r, Nothing, Nothing) = Res r
+  abst (Nothing, Just c, Nothing) = Cap c
+  abst (Nothing, Nothing, Just i) = Ind i
+  repr (Res r) = (Just r, Nothing, Nothing)
+  repr (Cap c) = (Nothing, Just c, Nothing)
+  repr (Ind i) = (Nothing, Nothing, Just i)
 
-instance HasV R RLC
+
+instance HasV R (Maybe R) where
+  type V R (Maybe R) = Maybe :.: V R R
+  toV = Comp1 . fmap toV
+  unV = fmap unV . unComp1
+
+  
+instance HasV R (RLC)
+--instance HasV R RLC where
+  
 
 newtype LCirc l v i o = LCirc { runLCirc :: (LG l v, CospanC v i o) } deriving (Eq, Ord, Show, Generic)
 
@@ -207,3 +216,5 @@ instance (Ord l, Ord v) => CoproductCat (LCirc l v) where
   inl = lcirc inl 
   inr = lcirc inr
   jam = lcirc jam
+
+

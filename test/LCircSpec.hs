@@ -12,12 +12,17 @@ import ConCat.Category hiding (it)
 
 
 import ConCat.LCirc
+import ConCat.Cospan
+import ConCat.LGraph
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import ConCat.Pair
 import Control.Applicative
 import Control.Monad.IO.Class
 
+
+instance Arbitrary NodeId where
+  arbitrary = NodeId <$> arbitrarySatisfying (\x -> x > 0)
 
 instance (Arbitrary v) => Arbitrary (Pair v) where
   arbitrary = (:#) <$> arbitrary <*> arbitrary

@@ -1,3 +1,6 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -6,14 +9,20 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
+
 module ConCat.LGraph where
 
 import Prelude hiding ((.), id, curry, uncurry)
+
+
 import ConCat.Category
 import ConCat.Rep
 import ConCat.Misc
 import ConCat.Pair
 import ConCat.Free.VectorSpace
+import ConCat.Circuit
+
+
 import Data.Bifunctor
 import GHC.Generics hiding (Rep, R)
 import qualified Data.Set as Set
@@ -33,7 +42,12 @@ class (OkLV l v) => OkLV' l v i
 
 {-------------------  The Nodes ------------------------}
 
-type NodeId = Int
+newtype NodeId = NodeId Int deriving (Eq, Ord, Show, Num, Enum, Real, Integral, Generic)
+
+instance HasRep NodeId where
+  type Rep (NodeId) = Int
+  repr (NodeId i) = i
+  abst = NodeId
 
 newtype VI = VI (NodeId, Pair R) deriving (Show, Generic)
 
@@ -169,3 +183,33 @@ replaceMatching (Just f) Nothing e@(Edge (s :# t, l)) = (Edge (f s :# t, l))
 replaceMatching Nothing (Just g) e@(Edge (s :# t, l)) = (Edge (s :# g t, l))
 replaceMatching Nothing Nothing e@(Edge (s :# t, l)) = e
 
+
+
+-- Circuit Instances
+
+instance GenBuses NodeId where
+  genBuses' = genBusesRep'
+  ty = tyRep @NodeId
+  unflattenB' = genUnflattenB'
+
+instance GenBuses VI where
+  genBuses' = genBusesRep'
+  ty = tyRep @VI
+  unflattenB' = genUnflattenB'
+
+{--
+instance (GenBuses v) => GenBuses (Nodes v) where
+  genBuses' = genBusesRep'
+  ty = tyRep @ (Nodes v)
+  unflattenB' = genUnflattenB'
+
+instance (GenBuses l, GenBuses v) => GenBuses (Edge l v) where
+  genBuses' = genBusesRep'
+  ty = tyRep @ (Edge l v)
+  unflattenB' = genUnflattenB'
+
+instance (GenBuses l, GenBuses v, OkLV l v) => GenBuses (LG l v) where
+  genBuses' = genBusesRep'
+  ty = tyRep @ (LG l v)
+  unflattenB' = genUnflattenB'
+--}

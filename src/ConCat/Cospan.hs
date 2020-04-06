@@ -2,6 +2,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module ConCat.Cospan where
 
 import Prelude hiding ((.), id, curry, uncurry, const)
@@ -13,11 +15,14 @@ import Data.Coerce
 import Data.List
 import qualified Data.Map as Map
 import Data.Map (Map(..))
+import ConCat.Circuit
+
+
+
+
 {-------------------------
      Operadic Machinery for Cospans with Nat-Indexed Ports
 --------------------------}
-
-
 type PortId = Int
 
 
@@ -104,3 +109,5 @@ compPorts is os = Map.fromList $ map (uncurry unifyPorts) $ zip os is
   where
     unifyPorts :: (Eq v) => Port a v -> Port a v -> (v, (v -> v))
     unifyPorts (Port (p, n)) (Port (p', n')) = (n', (\c -> if c == n' then n else c))
+
+
