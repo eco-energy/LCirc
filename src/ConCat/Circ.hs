@@ -1,10 +1,14 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# Language TypeOperators, TypeApplications, ScopedTypeVariables #-}
 
 module ConCat.Circ where
 
-{--
+import Prelude hiding ((.), id, curry, uncurry, const)
 import ConCat.Circuit ( CircuitM, (:>)
   , Bus(..),Comp(..),Input,Output, Ty(..), busTy, Source(..), Template(..)
   , GenBuses(..), GS, genBusesRep', tyRep
@@ -23,77 +27,72 @@ import ConCat.Circuit ( CircuitM, (:>)
   , OkCAR
   -- , Ty(..)
   )
+import GHC.Generics (unComp1, (:.:)(..), Generic)
 
-
-import qualified ConCat.Circuit as C
+import ConCat.Misc
 import qualified ConCat.RunCircuit as RC
-import ConCat.Deep
-import ConCat.Free.VectorSpace (HasV(..), distSqr, (<.>), normalizeV)
-import qualified ConCat.AltCat as A
+import ConCat.Rep
+import ConCat.Category
 
+import ConCat.AltCat ()
 import ConCat.Rebox () -- necessary for reboxing rules to fire
 import ConCat.Orphans ()
-import ConCat.Nat
-import ConCat.Shaped
-
-import ConCat.Free.LinearRow
-import ConCat.Isomorphism
-import ConCat.Free.Affine
-import ConCat.Chain
-import ConCat.Choice
 import ConCat.Free.VectorSpace
+import ConCat.Free.Affine
+import ConCat.Free.LinearRow
+
 import Data.Vector.Sized (Vector)
+import Data.Constraint
 
-import ConCat.Utils
-import ConCat.LCirc (CircEl(..), LG(..), Edge(..), VI(..), LCirc'(..), R, CospanC(..), NodeId(..))
+-- This is what a morphism looks like in LCirc
+data RLC = Res R
+  | Cap R
+  | Ind R
+  deriving (Eq, Ord, Show, Generic)
 
 
+instance HasRep (RLC) where
+  type Rep (RLC) = (Maybe R, Maybe R, Maybe R)
+  abst (Just r, Nothing, Nothing) = Res r
+  abst (Nothing, Just c, Nothing) = Cap c
+  abst (Nothing, Nothing, Just i) = Ind i
+  repr (Res r) = (Just r, Nothing, Nothing)
+  repr (Cap c) = (Nothing, Just c, Nothing)
+  repr (Ind i) = (Nothing, Nothing, Just i)
 
 
-a = runCirc "affRelu" $ A.toCcc $ affRelu @(Vector 2) @(Vector 3) @R
+instance HasV R (Maybe R) where
+  type V R (Maybe R) = Maybe :.: V R R
+  toV = Comp1 . fmap toV
+  unV = fmap unV . unComp1
 
-instance GenBuses NodeId where
+instance HasV R (RLC)
+
+instance GenBuses (RLC) where
   genBuses' = genBusesRep'
-  ty = tyRep @NodeId
+  ty = tyRep @RLC
   unflattenB' = genUnflattenB'
 
-instance GenBuses VI where
+type RLCTemplate = Template RLC RLC
+
+newtype LCirc i o = LC { unLC :: RLC :> RLC }
+
+blackbox :: (RLC :> RLC) -> Affine R R R :> Affine R R R
+blackbox = undefined
+
+newtype Blackbox a = Blackbox a deriving (Eq, Ord, Functor, Generic)
+
+instance (HasRep a) => HasRep (Blackbox a) where
+  type Rep (Blackbox a) = a
+  abst = Blackbox
+  repr (Blackbox a) = a
+
+instance (GenBuses a) => GenBuses (Blackbox a) where
   genBuses' = genBusesRep'
-  ty = tyRep @VI
+  ty = tyRep @(Blackbox a)
   unflattenB' = genUnflattenB'
 
-instance GenBuses CircEl where
-  genBuses' = genBusesRep'
-  ty = tyRep @CircEl
-  unflattenB' = genUnflattenB'
+instance OkFunctor (:>) (Blackbox) where
+  okFunctor = Entail (Sub Dict)
 
-instance (GenBuses l, GenBuses v) => GenBuses (Edge l v) where
-  genBuses' = genBusesRep'
-  ty = tyRep @ (Edge l v)
-  unflattenB' = genUnflattenB'
-
-instance (GenBuses l, GenBuses v) => GenBuses (LG l v) where
-  genBuses' = genBusesRep'
-  ty = tyRep @ (LG l v)
-  unflattenB' = genUnflattenB'
-
-
-instance GenBuses (CospanC v i o) where
-  genBuses' = genBusesRep'
-  ty = tyRep @ (CospanC v i o)
-  unflattenB' = genUnflattenB'
-
-instance GenBuses (LCirc' i o) where
-  genBuses' = genBusesRep'
-  ty = tyRep @ (LCirc' i o)
-  unflattenB' = genUnflattenB'
-
-
---runCirc :: GO a b => String -> (a :> b) -> IO ()
--- type GO a b = (GenBuses a, Ok2 (:>) a b)
-
-
-rc :: (CircEl :> VI) -> IO ()
-rc = runCirc "name" 
-
---}
+--instance FunctorCat (:>) (Blackbox)
