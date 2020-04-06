@@ -43,6 +43,7 @@ dependencies:
 - linear
 - singletons
 - attoparsec
+- constraints
 library:
   source-dirs: src
 
