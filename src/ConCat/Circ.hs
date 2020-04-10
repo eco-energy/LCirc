@@ -1,3 +1,6 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -40,19 +43,23 @@ import ConCat.Orphans ()
 import ConCat.Free.VectorSpace
 import ConCat.Free.Affine
 import ConCat.Free.LinearRow
+import ConCat.Additive
 
 import Data.Vector.Sized (Vector)
 import Data.Constraint
+import Data.Complex
+import Data.Key
+
 
 -- This is what a morphism looks like in LCirc
-data RLC = Res R
-  | Cap R
-  | Ind R
-  deriving (Eq, Ord, Show, Generic)
+data RLC a = Res a
+  | Cap a
+  | Ind a
+  deriving (Eq, Show, Functor, Generic)
 
 
-instance HasRep (RLC) where
-  type Rep (RLC) = (Maybe R, Maybe R, Maybe R)
+instance (HasRep a) => HasRep (RLC a) where
+  type Rep (RLC a) = (Maybe a, Maybe a, Maybe a)
   abst (Just r, Nothing, Nothing) = Res r
   abst (Nothing, Just c, Nothing) = Cap c
   abst (Nothing, Nothing, Just i) = Ind i
@@ -61,31 +68,69 @@ instance HasRep (RLC) where
   repr (Ind i) = (Nothing, Nothing, Just i)
 
 
-instance HasV R (Maybe R) where
-  type V R (Maybe R) = Maybe :.: V R R
+instance (HasV R a) => HasV R (Maybe a) where
+  type V R (Maybe a) = Maybe :.: V R a
   toV = Comp1 . fmap toV
   unV = fmap unV . unComp1
 
-instance HasV R (RLC)
+instance (HasV R a) => HasV R (Complex a)
 
-instance GenBuses (RLC) where
+instance (HasRep a, HasV R a) => HasV R (RLC a)
+
+instance (GenBuses a) => GenBuses (RLC a) where
   genBuses' = genBusesRep'
-  ty = tyRep @RLC
+  ty = tyRep @(RLC a)
   unflattenB' = genUnflattenB'
 
-type RLCTemplate = Template RLC RLC
 
-newtype LCirc i o = LC { unLC :: RLC :> RLC }
+newtype VI a = VI (a, a) deriving (Eq, Ord, Generic)
 
-blackbox :: (RLC :> RLC) -> Affine R R R :> Affine R R R
-blackbox = undefined
+instance HasRep a => HasRep (VI a) where
+  type Rep (VI a) = (a, a)
+  repr (VI (v, i)) = (v, i)
+  abst = VI
 
-newtype Blackbox a = Blackbox a deriving (Eq, Ord, Functor, Generic)
+instance (GenBuses a) => GenBuses (VI a) where
+  genBuses' = genBusesRep'
+  ty = tyRep @(VI a)
+  unflattenB' = genUnflattenB'
+
+instance (HasRep a, HasV R a) => HasV R (VI a)
+
+--elem :: VI' :> RLC
+--elem = namedC "elem"
+
+type VI' = VI R
+
+type LC a = (VI a, RLC a)
+
+-- laplace transform all the tings
+
+--class Circ i b where
+--  codup :: (Num b) => (LC b :* LC b) -> (LC b) -> (LC b)
+--  dup :: (Num b) => (LC b) -> ((LC b) :* (LC b))
+--  unit :: (Num b) => () -> (LC b)
+--  counit :: (Num b) => (LC b) -> ()
+
+
+blackbox :: Fractional a => (VI a) -> (RLC a) -> (VI a)
+blackbox (VI (v,i)) (Res r) = VI (v + r*i, i)
+blackbox (VI (v,i)) (Cap c) = VI (v + (i / c), i)
+blackbox (VI (v, i)) (Ind l) = VI (v + (l * i), i)
+
+--bb :: (Fractional b) => Circ a -> VI b
+--bb (Codup (lc1, lc2) lc3) = (uncurry blackbox $ lc1)
+
+--blackbox :: (RLC :> RLC) -> Affine R R R
+--blackbox = undefined
+
+newtype Blackbox a = Blackbox (L R a R) deriving (Generic)
+
 
 instance (HasRep a) => HasRep (Blackbox a) where
   type Rep (Blackbox a) = a
-  abst = Blackbox
-  repr (Blackbox a) = a
+  abst = undefined $ Blackbox
+  repr (Blackbox a) = undefined $ a
 
 instance (GenBuses a) => GenBuses (Blackbox a) where
   genBuses' = genBusesRep'
@@ -95,4 +140,4 @@ instance (GenBuses a) => GenBuses (Blackbox a) where
 instance OkFunctor (:>) (Blackbox) where
   okFunctor = Entail (Sub Dict)
 
---instance FunctorCat (:>) (Blackbox)
+
