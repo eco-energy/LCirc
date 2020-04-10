@@ -20,8 +20,10 @@ import ConCat.Category hiding (it)
 import ConCat.Rep
 import ConCat.Free.VectorSpace hiding (it)
 import ConCat.Circuit
+import ConCat.Misc
+import Data.Complex
 
-instance Arbitrary RLC where
+instance (Arbitrary a) => Arbitrary (RLC a) where
   arbitrary = oneof [Res <$> arbitrary, Cap <$> arbitrary, Ind <$> arbitrary]
 
 spec = do
@@ -35,7 +37,7 @@ spec = do
           print $ "repr: " <> (show $ repr r)
           print $ "abst . repr " <> (show $ (abst @ RLC) . repr $ r)
       mapM (vcheck) a--}
-      property $ ((\(x :: RLC) -> (abst . repr $ x) == x))
+      property $ ((\(x :: (RLC (Complex R))) -> (abst . repr $ x) == x))
     it "Vectorspace instance is coherent" $ {--do
       a <- (arbs @RLC ) 10
       let
@@ -45,14 +47,19 @@ spec = do
           print $ "toVec: " <> (show $ (toV @Double @RLC) r)
           print $ "unVec . toVec " <> (show $ ((unV @Double @RLC) . (toV @Double @RLC) $ r))
       mapM vcheck a--}
-      property $ ((\(x :: RLC) -> ((unV @Double @RLC) . (toV @Double @RLC) $ x) == x))
+      property $ ((\(x :: RLC (Complex R)) -> ((unV @Double @(RLC (Complex R))) . (toV @Double @(RLC (Complex R))) $ x) == x))
     it "can generate a simple resistor component" $ do
       let
         --r = namedC "r" @(RLC :> RLC)
-        r0 :: RLC :> RLC
-        r0 = constC (Res 0)
-        brc = (fmapC @(:>) @Blackbox) r0
+        r0 :: CR
+        r0 = (Res 0)
+        r2 :: CR
+        r2 = (Res 2)
+        rn = addV r2 r0
+        --brc = (fmapC @(:>) @Blackbox) r0
       --print r
       --print r0
-      print brc
-      1 `shouldBe` 1
+      --print brc
+      rn `shouldBe` r2 
+
+type CR = RLC (Complex R)
