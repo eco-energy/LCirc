@@ -30,6 +30,8 @@ import Data.Set (Set(..))
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map(..))
 
+import Data.Monoid
+
 type OkLV l v = (Ord v, Ord l, Eq v, Eq l) 
 
 type OkV v = (Ord v, Eq v)
@@ -63,7 +65,6 @@ instance HasRep VI where
   abst (a, v, i) = VI (floor a, v :# i)
 
 instance HasV R VI
-
 
 
 {----------------------------------------------------------------------------------------
@@ -213,3 +214,4 @@ instance (GenBuses l, GenBuses v, OkLV l v) => GenBuses (LG l v) where
   ty = tyRep @ (LG l v)
   unflattenB' = genUnflattenB'
 --}
+
