@@ -1,3 +1,7 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -10,13 +14,15 @@ import Prelude hiding ((.), id, curry, uncurry, const)
 import ConCat.Category
 import ConCat.Rep
 import ConCat.Misc
+import ConCat.Free.VectorSpace
+
 import GHC.Generics (Generic)
 import Data.Coerce
 import Data.List
 import qualified Data.Map as Map
 import Data.Map (Map(..))
 import ConCat.Circuit
-
+import Data.Bifunctor
 
 
 
@@ -85,6 +91,7 @@ type Outputs v a = [Port a v]
 newtype Cospan k v = Cospan (v `k` v, v `k` v) deriving (Generic)
 
 newtype CospanC v i o = CospanC (Inputs v i, Outputs v o) deriving (Eq, Ord, Show, Generic)
+
 
 instance (HasRep v) => HasRep (CospanC v i o) where
   type Rep (CospanC v i o) = ([Rep (Port i v)], [Rep (Port o v)])
